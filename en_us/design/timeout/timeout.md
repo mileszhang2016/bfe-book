@@ -22,13 +22,31 @@ The timeout of communication between BFE and clients includes:
 
 + **Timeout for long connection with user**: from the end of the previous request to the completion of reading the next request header
 
++ **TLS handshake timeout**: from the start of TLS handshake to the completion of TLS handshake
+
 ![timeout between BFE and client](./timeout_BFE_client.png)
+
+In addition, BFE has a lifecycle timeout related to client connections:
+
++ **Graceful shutdown timeout**: the maximum time BFE waits for existing connections to complete after receiving a shutdown signal. After this time, BFE will forcibly close remaining connections.
 
 ### Method of Configuration
 
++ **TLS handshake timeout**
+
+  It is configured in [/conf/bfe.conf](https://github.com/bfenetworks/bfe/tree/master/conf). The unit is seconds. This configuration controls the maximum time for BFE to complete TLS/SSL handshake with the client, and can only take effect when the program is restarted.
+
+```
+[Server]
+...
+# tls handshake timeout, in seconds
+TlsHandshakeTimeout = 30
+...
+```
+
 + **Timeout for reading user request header**
 
-  It is configured in [/conf/bfe. conf](https://github.com/bfenetworks/bfe/tree/master/conf). The unit is seconds. This configuration can only take effect when the program is restarted, and cannot be hot reloaded.
+  It is configured in [/conf/bfe.conf](https://github.com/bfenetworks/bfe/tree/master/conf). The unit is seconds. This configuration can only take effect when the program is restarted, and cannot be hot reloaded.
 
 ```
 [Server]
@@ -105,6 +123,18 @@ ClientWriteTimeout = 60
     	 }
     }
 }
+```
+
++ **Graceful shutdown timeout**
+
+  It is configured in [/conf/bfe.conf](https://github.com/bfenetworks/bfe/tree/master/conf). The unit is seconds. This configuration controls the maximum time BFE waits for existing connections to complete after receiving a shutdown signal. After this time, BFE will forcibly close remaining connections and exit.
+
+```
+[Server]
+...
+# timeout for graceful shutdown (maximum 300 sec)
+GracefulShutdownTimeout = 10
+...
 ```
 
 ## Timeout of Communication Between BFE and Backend Instance

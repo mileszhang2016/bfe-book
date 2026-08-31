@@ -24,11 +24,13 @@ The following is the content of the configuration file. We can specify weight va
         "clusterA": {
             "GSLB_BLACKHOLE": 0,
             "subCluster1": 60,
-            "subCluster2": 40,
+            "subCluster2": 40
         }
     }
 }
 ```
+
+`GSLB_BLACKHOLE` is a reserved sub-cluster name that represents a blackhole sub-cluster. Traffic allocated to it is dropped, which is often used for overload protection.
 
 ## Sub-cluster Session Stickiness
 
@@ -78,6 +80,8 @@ Meaning of fields in "HashConf ":
 
   * 2: Use the header first. If the header does not exist, use the source IP.
 
+  * 3: Use the request URI for session persistence.
+
 * HashHeader: This parameter specifies the name of the field in the header when using the field in the header for session persistence. For example, in the above example, "Cookie: UID" specifies to use a cookie named UID for session persistence.
 
 * SessionSticky: Whether to enable instance-level session persistence.
@@ -88,9 +92,11 @@ Within a sub-cluster, we can define multiple instances. How to allocate the traf
 
 BFE supports following load balancing algorithm between instances of the sub-cluster :
 
-* Smooth weighted round robin
+* Smooth weighted round robin (WRR)
 
-* Least connections
+* Least connections (WLC)
+
+* External Processing Policy (EPP)
 
 ### Configuration Example of Weighted Round Robin
 
@@ -144,7 +150,7 @@ The configuration of the above scenario is as follows:
                 },
                 {
                     "Addr": "192.168.3.3",
-                    "Name": "instance-5",
+                    "Name": "instance-6",
                     "Port": 8080,
                     "Weight": 4
                 }
@@ -176,6 +182,27 @@ If you want to use the least connections algorithm between the instances of the 
 
 Modify the above configuration items, and the request will be forwarded to the instance with the least number of connections in the sub-cluster.
 
+### Configuration Example of External Processing Policy (EPP)
+
+If you want to use an external policy service to decide load balancing between instances, modify `"BalanceMode"` to `"EPP"` in *conf/server_data_conf/cluster_conf.data*, and configure `"EPPAddr"` to point to the EPP service address:
+
+```json
+{
+    "config": {
+        ...
+        "cluster_example": {
+            ...
+            "GslbBasic": {
+                ...
+                "BalanceMode": "EPP",
+                "EPPAddr": ["epp-server:50051"],
+                ...
+            }
+    }
+}
+```
+
+In EPP mode, BFE first sends the request to the EPP service to obtain the target backend address, and then looks up the corresponding backend in the local sub-cluster.
 
 ## Example of Instance-level Session Persistence
 
@@ -196,6 +223,48 @@ Modify the configuration and set "SessionSticky" in *conf/server_data_conf/clust
 When this function is enabled, BFE will use the hash method to calculate the back-end instance in the sub-cluster. In this way, requests with the same UID can always be hashed to get the same backend, thus realizing the session persistence function.
 
 The same problem will occur here: if the backend instance list changes, the session will be transferred to other instances.
+
+## Session Stickiness with mod_session_sticky
+
+In addition to the `HashConf`-based session persistence described above, BFE provides the `mod_session_sticky` module. It supports binding requests to backend instances via Cookie or Sticky ID, and supports both local LRU cache and Redis distributed cache modes.
+
+After enabling the module (add `mod_session_sticky` to `Modules` in `bfe.conf`), configure the following files:
+
+- `conf/mod_session_sticky/mod_session_sticky.conf`: base configuration, specifying the rule file path, cache type, etc.
+- `conf/mod_session_sticky/session_sticky.data`: rule configuration, defining session stickiness rules per product line.
+
+### Configuration Example (Cookie Mode)
+
+```ini
+[Basic]
+DataPath = mod_session_sticky/session_sticky.data
+CacheSize = 10000
+CacheType = local
+
+[Log]
+OpenDebug = true
+```
+
+```json
+{
+    "Version": "2024-01-01 00:00:00",
+    "Config": {
+        "example_product": [
+            {
+                "Cond": "default_t()",
+                "Type": "Cookie",
+                "CookieKey": "bfe_ssbl",
+                "Domain": ".example.com",
+                "Path": "/",
+                "MaxAge": 3600,
+                "MaskCode": "my_secret_mask_code"
+            }
+        ]
+    }
+}
+```
+
+`Type` can also be set to `Sticky`, in which case the sticky ID can be extracted from a request header, URI parameter, or JSON request/response body field. Refer to the BFE configuration documentation for detailed field descriptions.
 
 ## links
 Previous: [Chap20 Basic Configuration of BFE Service](../../../en_us/operation/config_basic/basic.md)  

@@ -30,9 +30,42 @@ BFE模块插件机制的要点如下：
 回调点的定义，可以查看[/bfe_module/bfe_callback.go](https://github.com/bfenetworks/bfe/tree/master/bfe_module/bfe_callback.go)
 
 BFE转发过程中的回调点如下图所示。
-![bfe callback](./bfe-callback.png)
 
+```text
+连接/请求生命周期中的回调点：
 
+   连接建立
+      │
+      ▼
+ HandleAccept        ── TCP 连接建立后
+      │
+      ▼
+ HandleHandshake     ── TLS/SSL 握手完成后
+      │
+      ▼
+ HandleBeforeLocation ── 查找租户（产品线）前
+      │
+      ▼
+ HandleFoundProduct  ── 确定租户后
+      │
+      ▼
+ HandleAfterLocation ── 查找集群后
+      │
+      ▼
+ HandleForward       ── 选择后端实例后、转发请求前
+      │
+      ▼
+  后端处理请求...
+      │
+      ▼
+ HandleReadResponse  ── 读取到后端响应后
+      │
+      ▼
+ HandleRequestFinish ── 请求处理完毕后
+      │
+      ▼
+ HandleFinish        ── TCP 连接关闭后
+```
 
 ## BFE内置模块
 
@@ -53,15 +86,24 @@ BFE转发过程中的回调点如下图所示。
 |            | mod_static         | 根据自定义条件，返回静态文件作为响应                         |
 |            | mod_userid         | 根据自定义的条件，为新用户自动在Cookie中添加用户标识         |
 |            | mod_markdown       | 根据自定义条件，将响应中markdown格式内容转换为html格式       |
+|            | mod_tcp_keepalive  | 根据自定义条件，管理TCP长连接心跳包的发送策略                |
+|            | mod_session_sticky | 实现会话保持，确保同一用户的请求在会话有效期内路由到同一后端 |
 | 安全防攻击 | mod_auth_basic     | 根据自定义的条件，支持HTTP基本认证                           |
 |            | mod_auth_jwt       | 根据自定义的条件，支持JWT (JSON Web Token)认证               |
-|            | mod_auth_request   | 根据自定义的条件，支持将请求转发认证服务进行认证。           |
+|            | mod_auth_request   | 根据自定义的条件，支持将请求转发认证服务进行认证             |
 |            | mod_block          | 根据自定义的条件，对连接或请求进行封禁                       |
 |            | mod_prison         | 根据自定义的条件，限定单位时间用户的访问频次                 |
 |            | mod_waf            | 根据自定义的条件，对请求执行应用防火墙规则检测或封禁         |
+|            | mod_unified_waf    | 支持接入统一的第三方WAF服务进行检测                          |
 |            | mod_cors           | 根据自定义的条件，设置跨源资源共享策略                       |
 |            | mod_secure_link    | 根据自定义的条件，对请求签名或有效期进行验证                 |
+| AI 网关    | mod_ai_token_auth  | 支持大模型 API-Key(token) 鉴权及配额管理                     |
+|            | mod_ai_route       | 根据AI路由规则，将AI请求路由到不同后端集群和模型             |
+|            | mod_body_process   | 提供请求/响应Body的流式处理框架，支持SSE等场景               |
+|            | mod_ai_rate_limit  | 对AI请求按TPM/RPM/并发等维度进行分布式限流                   |
+| 扩展框架   | mod_wasmplugin     | 支持运行遵循proxy-wasm规范的WASM插件，扩展请求/响应处理能力  |
 | 流量可见性 | mod_access         | 以指定格式记录请求日志和会话日志                             |
+|            | mod_access_pb3     | 以Protocol Buffers v3格式记录访问日志                        |
 |            | mod_key_log        | 以NSS key log格式记录TLS会话密钥, 便于基于解密分析TLS密文流量诊断分析 |
 |            | mod_trace          | 根据自定义的条件，为请求开启分布式跟踪                       |
 |            | mod_http_code      | 统计HTTP响应状态码                                           |

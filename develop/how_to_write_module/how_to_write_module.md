@@ -50,8 +50,16 @@ mod_block的代码位于[/bfe_modules/mod_block](https://github.com/bfenetworks/
 例如，在mod_block的初始化函数中，可以看到类似下面的逻辑，就是在注册配置加载的回调(详见[mod_block.go](https://github.com/bfenetworks/bfe/tree/master/bfe_modules/mod_block/mod_block.go)):
 
 ```golang
+func (m *ModuleBlock) reloadHandlers() map[string]interface{} {
+    handlers := map[string]interface{}{
+        m.name + ".global_ip_table":    m.loadGlobalIPTable,
+        m.name + ".product_rule_table": m.loadProductRuleConf,
+    }
+    return handlers
+}
+
     // register web handler for reload
-    err = whs.RegisterHandler(web_monitor.WebHandleReload, m.name, m.loadConfData)
+    err = web_monitor.RegisterHandlers(whs, web_monitor.WebHandleReload, m.reloadHandlers())
     if err != nil {
       ...
     }
@@ -63,7 +71,7 @@ mod_block的代码位于[/bfe_modules/mod_block](https://github.com/bfenetworks/
 
 根据模块的功能需求，选择合适的回调点，对应编写回调函数。
 
-注意，对于不同的回调点，回调函数的形式可能不同。BFE所提供的回调点和回调函数的形式，可参考[BFE的回调机制](./bfe_callback.md)
+注意，对于不同的回调点，回调函数的形式可能不同。BFE所提供的回调点和回调函数的形式，可参考[BFE的回调机制](https://github.com/bfenetworks/bfe/blob/develop/docs/zh_cn/development/module/bfe_callback.md)
 
 例如，在mod_block中，编写了以下两个回调函数(详见[mod_block.go](https://github.com/bfenetworks/bfe/tree/master/bfe_modules/mod_block/mod_block.go))：
 
@@ -101,6 +109,20 @@ func (m *ModuleBlock) Init(cbs *bfe_module.BfeCallbacks, whs *web_monitor.WebHan
 }
 ```
 
+## 模块的注册
+
+为了让BFE加载新开发的模块，需要将其注册到[/bfe_modules/bfe_modules.go](https://github.com/bfenetworks/bfe/tree/master/bfe_modules/bfe_modules.go)的模块列表中。
+
+```golang
+var moduleList = []bfe_module.BfeModule{
+    ...
+    mod_block.NewModuleBlock(),
+    ...
+}
+```
+
+模块在`moduleList`中的顺序非常重要，会影响模块的执行时机。如果新模块依赖或被依赖其他模块，应通过注释说明其顺序要求，并将模块放在正确的位置。具体顺序约束可参考`bfe_modules.go`中的现有注释。
+
 ## 模块状态的展示
 
 对于每个BFE的模块，强烈推荐通过BFE规定的机制，向外暴露足够的内部状态信息。
@@ -123,7 +145,6 @@ type ModuleBlockState struct {
     ConnAccept   *metrics.Counter // connection passed
     ConnRefuse   *metrics.Counter // connection refused
     ReqTotal     *metrics.Counter // all request in
-    ReqToCheck   *metrics.Counter // request to check
     ReqAccept    *metrics.Counter // request accepted
     ReqRefuse    *metrics.Counter // request refused
     WrongCommand *metrics.Counter // request with condition satisfied, but wrong command

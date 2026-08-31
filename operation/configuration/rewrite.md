@@ -4,7 +4,7 @@
 ## 开启rewrite
 在conf/bfe.conf中，打开该模块
 ```ini
-Modules = mod_write
+Modules = mod_rewrite
 ```
 
 ## 模块配置
@@ -18,9 +18,14 @@ mod_rewrite.conf为模块基础配置文件，指向rewrite规则文件，通常
 
 ```
 $ cat mod_rewrite.conf 
-[basic]
+[Basic]
 DataPath = mod_rewrite/rewrite.data
+
+[Log]
+OpenDebug = false
 ```
+
+其中，`Log.OpenDebug` 用于控制是否输出 debug 日志，默认值为 `false`。
 
 rewrite.data 包含rewrite规则，可动态加载。安装包中的示例配置文件如下：
 
@@ -81,8 +86,8 @@ $ cat rewrite.data
 示例：
 ```json  
 {
-    "cmd": "HOST_SET_FROM_PATH_PREFIX", 
-    "params": []
+    "Cmd": "HOST_SET_FROM_PATH_PREFIX", 
+    "Params": []
 }
 ```
 
@@ -101,8 +106,8 @@ $ cat rewrite.data
 示例：
 ```json  
 {
-    "cmd": "HOST_SUFFIX_REPLACE", 
-    "params": ["net", "com"]
+    "Cmd": "HOST_SUFFIX_REPLACE", 
+    "Params": ["net", "com"]
 }
 ```
 
@@ -120,8 +125,8 @@ $ cat rewrite.data
 示例：
 ```json  
 {
-    "cmd": "PATH_SET", 
-    "params": ["/index"]
+    "Cmd": "PATH_SET", 
+    "Params": ["/index"]
 }
 ```
 
@@ -139,8 +144,8 @@ $ cat rewrite.data
 示例：
 ```json  
 {
-    "cmd": "PATH_PREFIX_ADD", 
-    "params": ["/index"]
+    "Cmd": "PATH_PREFIX_ADD", 
+    "Params": ["/index"]
 }
 ```
 
@@ -148,7 +153,7 @@ $ cat rewrite.data
 | | |
 |-|-|
 |原始值   | http://www.example.com/current |
-|修改后   | http://www.example.com/index/current |
+|修改后   | http://www.example.com/indexcurrent |
 
 <br />
 
@@ -158,8 +163,8 @@ $ cat rewrite.data
 示例：
 ```json  
 {
-    "cmd": "PATH_PREFIX_TRIM", 
-    "params": ["/service"]
+    "Cmd": "PATH_PREFIX_TRIM", 
+    "Params": ["/service"]
 }
 ```
 
@@ -177,8 +182,8 @@ $ cat rewrite.data
 示例：
 ```json  
 {
-    "cmd": "QUERY_ADD", 
-    "params": ["name", "alice"]
+    "Cmd": "QUERY_ADD", 
+    "Params": ["name", "alice"]
 }
 ```
 
@@ -197,8 +202,8 @@ $ cat rewrite.data
 示例：
 ```json  
 {
-    "cmd": "QUERY_ADD", 
-    "params": ["name", "user"]
+    "Cmd": "QUERY_RENAME", 
+    "Params": ["name", "user"]
 }
 ```
 
@@ -216,8 +221,8 @@ $ cat rewrite.data
 示例：
 ```json  
 {
-    "cmd": "QUERY_ADD", 
-    "params": ["name"]
+    "Cmd": "QUERY_DEL", 
+    "Params": ["name"]
 }
 ```
 
@@ -235,15 +240,15 @@ $ cat rewrite.data
 示例：
 ```json  
 {
-    "cmd": "QUERY_DEL_ALL_EXCEPT", 
-    "params": ["name"]
+    "Cmd": "QUERY_DEL_ALL_EXCEPT", 
+    "Params": ["name"]
 }
 ```
 
 结果：
 | | |
 |-|-|
-|原始值   | http://www.example.com/?name=alice?key1=value2&key2=value2 |
+|原始值   | http://www.example.com/?name=alice&key1=value2&key2=value2 |
 |修改后   | http://www.example.com/?name=alice |
 
 <br />

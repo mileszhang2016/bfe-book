@@ -24,11 +24,13 @@
         "clusterA": {
             "GSLB_BLACKHOLE": 0,
             "subCluster1": 60,
-            "subCluster2": 40,
+            "subCluster2": 40
         }
     }
 }
 ```
+
+其中，`GSLB_BLACKHOLE` 是保留子集群名称，表示黑洞子集群；分配到该子集群的流量会被丢弃，常用于过载保护。
 
 ## 子集群会话保持
 
@@ -74,6 +76,7 @@ Cookie: UID=12345
     * 0：使用请求header中的域做会话保持，域的名字由\"HashHeader\"指定。
     * 1: 使用请求的源IP地址做会话保持
     * 2：优先使用header，如该header不存在，使用源IP。
+    * 3：使用请求的URI做会话保持。
 
 * HashHeader: 当使用header中的域进行会话保持时，该参数指定了header中域的名字。 比如在上面示例中，"Cookie:UID"指定使用名为UID的cookie做会话保持。
 
@@ -84,8 +87,9 @@ Cookie: UID=12345
 一个子集群内部，我们可以定义多个实例。如何将这个子集群上的流量，分配到这些实例当中，这就涉及到实例间的负载均衡问题。
 
 子集群的实例间的负载均衡算法支持：
-* 平滑加权轮询
-* 最少连接数
+* 平滑加权轮询（WRR）
+* 最少连接数（WLC）
+* 外部策略（EPP）
 
 ### 加权轮询的配置示例
 
@@ -137,7 +141,7 @@ Cookie: UID=12345
                 },
                 {
                     "Addr": "192.168.3.3",
-                    "Name": "instance-5",
+                    "Name": "instance-6",
                     "Port": 8080,
                     "Weight": 4
                 }
@@ -169,6 +173,27 @@ Cookie: UID=12345
 
 修改上述配置项，后端请求会被转发到子集群中连接数最少的实例。
 
+### 外部策略（EPP）配置示例
+
+如果希望通过外部策略服务（External Processing Policy）决定实例间负载均衡，修改*conf/server_data_conf/cluster_conf.data*中的 `"BalanceMode"` 为 `"EPP"`，并配置 `"EPPAddr"` 指向 EPP 服务端地址：
+
+```json
+{
+    "config": {
+        ...
+        "cluster_example": {
+            ...
+            "GslbBasic": {
+                ...
+                "BalanceMode": "EPP",
+                "EPPAddr": ["epp-server:50051"],
+                ...
+            }
+    }
+}
+```
+
+使用 EPP 模式时，BFE 会先将请求发送到 EPP 服务获取目标后端地址，再在本地子集群中查找对应后端。
 
 ## 实例级别的会话保持示例
 
@@ -187,6 +212,48 @@ Cookie: UID=12345
 当开启该功能，BFE会使用hash方式，计算得到子集群中的后端实例。这样，相同UID的消息，总能hash得到相同的后端，从而实现了会话保持功能。
 
 这里也会出现同样的问题：如果后端实例列表发生变化，会话会转移到其他实例上。
+
+## 使用 mod_session_sticky 实现会话保持
+
+除了上述基于 `HashConf` 的会话保持方式，BFE 还提供 `mod_session_sticky` 模块，支持通过 Cookie 或 Sticky ID 将请求固定到后端实例，并提供本地 LRU 缓存和 Redis 分布式缓存两种模式。
+
+启用该模块后（在 `bfe.conf` 的 `Modules` 中加入 `mod_session_sticky`），需配置：
+
+- `conf/mod_session_sticky/mod_session_sticky.conf`：模块基础配置，指定规则文件路径、缓存类型等。
+- `conf/mod_session_sticky/session_sticky.data`：规则配置，按产品线定义会话保持规则。
+
+### 配置示例（Cookie 模式）
+
+```ini
+[Basic]
+DataPath = mod_session_sticky/session_sticky.data
+CacheSize = 10000
+CacheType = local
+
+[Log]
+OpenDebug = true
+```
+
+```json
+{
+    "Version": "2024-01-01 00:00:00",
+    "Config": {
+        "example_product": [
+            {
+                "Cond": "default_t()",
+                "Type": "Cookie",
+                "CookieKey": "bfe_ssbl",
+                "Domain": ".example.com",
+                "Path": "/",
+                "MaxAge": 3600,
+                "MaskCode": "my_secret_mask_code"
+            }
+        ]
+    }
+}
+```
+
+`Type` 还可设置为 `Sticky`，此时可通过请求的 Header、URI 参数或 JSON 请求体/响应体字段提取 stickyid。详细字段说明可参考 BFE 配置文档。
 
 ## links
 上一章：[第二十章 BFE服务的基础配置](../../operation/configuration/basic.md)  

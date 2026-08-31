@@ -2,26 +2,49 @@
 
 BFE can process the traffic of multiple tenants at the same time. Each tenant contains multiple clusters, and each cluster handles requests for different types of services. **Request routing** refers to the process of determining the tenant and target cluster to which the request belongs during BFE forwarding request.
 
-The BFE forwarding process can refer to the description in [Forwarding Model](../../design/model/model. md).
+The BFE forwarding process can refer to the description in [Forwarding Model](../../design/model/model.md).
 
 
 ## Key Data Structures
 
-In routing module bfe_route/host_table.go, the data structure used to manage routing rules is defined. It mainly includes the following types:
+In routing module bfe_route/host_table.go, the data structure used to manage routing rules is defined. It mainly includes the following types.
 
-### **Domain Name Table**(hostTable)
+The key fields of `HostTable` are as follows:
 
-HostTable is used to manage the mapping relationship between domain name and tenant identity.
+```go
+// bfe_route/host_table.go
 
-HostTable is a data structure of Trie tree type to facilitate the support of universal domain name lookup. In short, the path from each leaf node to the root node in the Trie tree represents a domain name, and the leaf node contains the tenant name.
+type HostTable struct {
+    versions Versions
+
+    hostTable      host_rule_conf.Host2HostTag    // hostname => host-tag
+    hostTagTable   host_rule_conf.HostTag2Product // host-tag => product
+    vipTable       vip_rule_conf.Vip2Product      // VIP => product
+    defaultProduct string                         // default product
+
+    hostTrie *trie.Trie
+
+    productBasicRouteTable    route_rule_conf.ProductBasicRouteRule
+    productBasicRouteTree     route_rule_conf.ProductBasicRouteTree
+    productAdvancedRouteTable route_rule_conf.ProductAdvancedRouteRule
+}
+```
+
+### **Domain Name Table**(hostTable) and **Domain Name Lookup Tree**(hostTrie)
+
+BFE uses several data structures together to manage the mapping from domain name to tenant:
+
+- `hostTable` (type `host_rule_conf.Host2HostTag`): stores the mapping from hostname to host-tag.
+- `hostTagTable` (type `host_rule_conf.HostTag2Product`): stores the mapping from host-tag to product (tenant).
+- `hostTrie` (type `*trie.Trie`): a Trie tree built in memory, used to quickly look up the host-tag and product according to the request Host.
+
+`hostTrie` is a Trie tree. The path from each leaf node to the root node represents a domain name, and the node stores `route{product, tag}`. To support wildcard domain name lookup, the node contains an exact match entry and a wildcard match entry.
 
 The data types of Trie tree nodes are as follows:
 
 - Children points to all child nodes of this node
-
-- Entry stores the domain name represented by the path from the node to the root node (e.g., x.example.com), and the corresponding tenant name
-
-- Splat stores the wildcard domain name (e.g., *. x.example.com) represented by the path from the node to the root node, and the corresponding tenant name
+- Entry stores the domain name represented by the path from the node to the root node (e.g., x.example.com), and the corresponding `route{product, tag}`
+- SplatEntry stores the wildcard domain name (e.g., *.x.example.com) represented by the path from the node to the root node, and the corresponding `route{product, tag}`
 
 ```go
 // bfe_route/trie/trie.go 
@@ -29,9 +52,9 @@ The data types of Trie tree nodes are as follows:
 type trieChildren map[string]*Trie
 
 type Trie struct {
-	Children   trieChildren 
-	Entry      interface{}
-	Splat      interface{}
+    Entry      interface{}
+    SplatEntry interface{} // to match xxx.xxx.*
+    Children   trieChildren 
 }
 ```
 
@@ -39,7 +62,7 @@ type Trie struct {
 
 VipTable is used to manage the mapping relationship between VIP and tenant ID.
 
-VipTalbe is a hash table type data structure. Where key represents VIP and value represents tenant name.
+VipTable is a hash table type data structure. Where key represents VIP and value represents tenant name.
 
 ```go
 // bfe_config/bfe_route_conf/vip_rule_conf/vip_table_load.go
@@ -47,34 +70,51 @@ VipTalbe is a hash table type data structure. Where key represents VIP and value
 type Vip2Product map[string]string
 ```
 
-### **Routing Rule Table**(productRouteTable)
+### **Basic Routing Rule Table**(productBasicRouteTable) and **Basic Routing Tree**(productBasicRouteTree)
 
-ProductRouteTable is used to manage the routing rule table of each tenant.
+`productBasicRouteTable` stores the basic rule list of each tenant; `productBasicRouteTree` builds a host+path index based on a Radix tree, which is used to quickly locate the target cluster according to Host and Path.
 
-ProductRouteTable is a data structure of hash table type. The key represents the name of the tenant, and the value is the routing rule table of the tenant.
-
-The routing rule table of each tenant contains an orderly set of routing rules. Each rule consists of rule conditions and destination clusters.
+Basic rules use domain name (Host) and path (Path) as matching conditions, and are matched according to the principles of exact first and longest match. The target cluster of a basic rule can be a normal cluster name or `ADVANCED_MODE`, which means the request continues to be matched in the advanced rule table after hitting this rule.
 
 ```go
 // bfe_config/bfe_route_conf/route_rule_conf/route_table_load.go
 
-type ProductRouteRule map[string]RouteRules
-
-
-// bfe_route/host_table.go
-
-type HostTable struct {
-	//...
-	
-	productRouteTable route_rule_conf.ProductRouteRule
+type BasicRouteRule struct {
+    Hostname    []string
+    Path        []string
+    ClusterName string
 }
+
+type ProductBasicRouteRule map[string]BasicRouteRules
+type ProductBasicRouteTree map[string]*BasicRouteRuleTree
+```
+
+The specific implementation of the Radix tree is in `bfe_config/bfe_route_conf/route_rule_conf/basic_rule_tree.go`.
+
+### **Advanced Routing Rule Table**(productAdvancedRouteTable)
+
+ProductAdvancedRouteTable is used to manage the advanced routing rule table of each tenant. The key represents the name of the tenant, and the value is the advanced routing rule table of the tenant.
+
+The advanced routing rule table of each tenant contains an orderly set of advanced routing rules. Each advanced rule consists of a condition expression and a destination cluster.
+
+```go
+// bfe_config/bfe_route_conf/route_rule_conf/route_table_load.go
+
+type AdvancedRouteRule struct {
+    Cond        condition.Condition
+    ClusterName string
+}
+
+type ProductAdvancedRouteRule map[string]AdvancedRouteRules
 ```
 
 ![product route table](product_route_table.png)
 
+(The figure above mainly illustrates the organization of the advanced rule table; the current implementation also includes a basic rule table and a basic routing tree.)
+
 ### **Routing Condition**(Condition)
 
-A routing condition is a condition expression composed of condition primitives and operators. For the syntax of condition expression, please refer to the description in [Traffic Routing](../../design/route/route. md).
+A routing condition is a condition expression composed of condition primitives and operators. For the syntax of condition expression, please refer to the description in [Traffic Routing](../../design/route/route.md).
 
 The condition expression is a binary tree in the form of infix expression in the internal data structure of BFE. The non-leaf node of the binary tree represents the operator. Leaf nodes represent condition primitives. When the request matches the routing condition, it is equivalent to evaluating the infix expression. The return value is Boolean, representing whether the request matches the rule.
 
@@ -88,7 +128,7 @@ LookupHostTagAndProduct() of HostTable implements the search of the target tenan
 
 The basic process of searching is as follows:
 
-- Step 1: According to Host field of the request, try to search the hostTable and return the hit tenant name.
+- Step 1: According to Host field of the request, try to search the hostTrie and return the hit tenant name.
 
 - Step 2: If the search fails, try to search the vipTable and return the hit tenant name according to the requested VIP.
 
@@ -131,13 +171,9 @@ LookupCluster() of HostTable implements the lookup of the destination cluster.
 
 The basic process of searching is as follows:
 
-- Step 1: Search the routing rule table according to the target tenant name of the request.
-
-- Step 2: In the tenant's routing rule table, match the request with the conditions of each rule in the table in order.
-
-- Step 3: Return the destination cluster for the first matching rule.
-
-Note that the last rule in the routing rule table is the default rule. If the last rule is executed, the default destination cluster will be returned.
+- Step 1: First use `productBasicRouteTree` to match the Host and Path of the request according to basic rules; if hit and the target cluster is not `ADVANCED_MODE`, return the target cluster directly.
+- Step 2: If the basic rule hits `ADVANCED_MODE` or does not hit, match the conditions of each rule in order in the tenant's advanced rule table `productAdvancedRouteTable`.
+- Step 3: Return the destination cluster specified by the first matched advanced rule. If the tenant has no advanced rule table or no rule matches, an error is returned.
 
 ```go
 // bfe_route/host_table.go
@@ -145,10 +181,31 @@ Note that the last rule in the routing rule table is the default rule. If the la
 // LookupCluster find clusterName with given request.
 func (t *HostTable) LookupCluster(req *bfe_basic.Request) error {
     var clusterName string
-    // get route rules
-    rules, ok := t.productRouteTable[req.Route.Product]
+
+    // match basic route rules
+    basicRules, ok := t.productBasicRouteTree[req.Route.Product]
+    if ok {
+        host := strings.SplitN(req.HttpRequest.Host, ":", 2)[0]
+
+        path := ""
+        if req.HttpRequest.URL != nil {
+            path = req.HttpRequest.URL.Path
+        }
+
+        clusterName, found := basicRules.Get(host, path)
+        if found && clusterName != route_rule_conf.AdvancedMode {
+            // set clusterName
+            req.Route.ClusterName = clusterName
+            return nil
+        }
+    }
+
+    // match advanced route rules
+    rules, ok := t.productAdvancedRouteTable[req.Route.Product]
     if !ok {
-        ...
+        req.Route.ClusterName = ""
+        req.Route.Error = ErrNoProductRule
+        return req.Route.Error
     }
 
     // matching route rules
@@ -158,13 +215,25 @@ func (t *HostTable) LookupCluster(req *bfe_basic.Request) error {
             break
         }
     }
-    ...
+
+    if clusterName == "" {
+        req.Route.ClusterName = ""
+        req.Route.Error = ErrNoMatchRule
+        return req.Route.Error
+    }
 
     // set clusterName
     req.Route.ClusterName = clusterName
+
     return nil
 }
 ```
+
+## AI Request Routing
+
+In the AI gateway scenario, BFE also routes AI requests through the `mod_ai_route` module. This module runs at the `HandleFoundProduct` callback, and looks up the routing table in the priority order of **apikey → entity → global** according to `AiBasicInfo.ClientApiKey`. After a rule is hit, it returns a `targets` list containing cluster, model, and weight, as well as a `fallbacks` degradation list, which are used by the AI gateway forwarding path `ServeHTTPForAI`.
+
+`mod_ai_route` is independent of the tenant-level basic/advanced rule tables described above and is mainly used in the AI gateway scenario. For related configuration and implementation, see `../../../bfe/docs/zh_cn/modules/mod_ai_route/mod_ai_route.md` and `../../../bfe/docs/zh_cn/sys_design/mod_ai_route.md`.
 
 
 ## links

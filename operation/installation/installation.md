@@ -2,9 +2,11 @@
 本章将对BFE的下载安装方式进行具体介绍，帮助读者了解如何运行BFE服务。
 
 ## BFE安装方式
-BFE支持多种方式进行安装，本章将介绍以下三种方式：
+BFE支持多种方式进行安装，本章将介绍以下五种方式：
 * 软件包下载安装
 * 源代码编译安装
+* go方式安装
+* snap方式安装
 * docker方式安装
 
 ## 软件包方式下载安装
@@ -19,22 +21,22 @@ BFE的安装软件包可以直接从BFE项目在github.com的页面中下载。
 读者可根据操作系统类型，选择所需的软件版本。
 
 ### 下载BFE软件包
-以Linux环境为例，下载BFE的1.0.0版本。
+以Linux环境为例，下载BFE的1.8.5版本。
 
-在上述下载页面上，找到"BFE v1.0.0"，点击展开“Asserts”，如下图：
+在上述下载页面上，找到"BFE v1.8.5"，点击展开“Asserts”，如下图：
 
 ![](img/v100_assert.png)
 
-点击下载名为"bfe_1.0.0_linux_amd64.tar.gz"的压缩包。
+点击下载名为"bfe_1.8.5_linux_amd64.tar.gz"的压缩包。
 
 ### BFE软件包中的内容
 
-解压下载的文件bfe_1.0.0_linux_amd64.tar.gz：
+解压下载的文件bfe_1.8.5_linux_amd64.tar.gz：
 
 ```
-sh-4.2# tar zxf bfe_1.0.0_linux_amd64.tar.gz 
+sh-4.2# tar zxf bfe_1.8.5_linux_amd64.tar.gz 
 sh-4.2# 
-sh-4.2# cd bfe_1.0.0_linux_amd64
+sh-4.2# cd bfe_1.8.5_linux_amd64
 sh-4.2# 
 sh-4.2# ls 
 CHANGELOG.md	LICENSE		README.md	bin		conf
@@ -52,12 +54,42 @@ bfe
 
 ```
 sh-4.2$ ls conf
-bfe.conf		mod_block		mod_header		mod_static		server_data_conf
-cluster_conf		mod_compress		mod_key_log		mod_tag			tls_conf
-mod_access		mod_cors		mod_markdown		mod_trace
-mod_auth_basic		mod_doh			mod_prison		mod_trust_clientip
-mod_auth_jwt		mod_errors		mod_redirect		mod_userid
-mod_auth_request	mod_geo			mod_rewrite		mod_waf
+bfe.conf
+cluster_conf
+mod_access
+mod_access_pb3
+mod_ai_rate_limit
+mod_ai_route
+mod_ai_token_auth
+mod_auth_basic
+mod_auth_jwt
+mod_auth_request
+mod_block
+mod_body_process
+mod_compress
+mod_cors
+mod_doh
+mod_errors
+mod_geo
+mod_header
+mod_key_log
+mod_markdown
+mod_prison
+mod_redirect
+mod_rewrite
+mod_session_sticky
+mod_static
+mod_tag
+mod_tcp_keepalive
+mod_trace
+mod_trust_clientip
+mod_unified_waf
+mod_userid
+mod_waf
+mod_wasm
+server_data_conf
+tls_conf
+wasm_plugin
 ```
 
 ### 运行BFE服务
@@ -94,8 +126,9 @@ BFE源代码完全在github.com上开源，用户也可以通过自行编译源�
 
 ### 环境准备
 - 环境要求
-  - golang 1.13+
+  - golang 1.22+
   - git 2.0+
+  - glibc-static 2.17+（Linux 下静态编译需要）
 
 
 
@@ -143,27 +176,89 @@ $ cd output/bin/
 $ ./bfe -c ../conf -l ../log
 ```
 
+## go方式安装
+
+### 环境准备
+- golang 1.22+
+
+### 安装
+
+```bash
+$ go install github.com/bfenetworks/bfe@latest
+```
+
+可执行目标文件位置: `${GOPATH}/bin/bfe` 或 `$(go env GOPATH)/bin/bfe`。
+
+> tips: 如果遇到超时错误，请设置 GOPROXY 代理后重试。
+
+### 运行
+
+```bash
+$ cd $(go env GOPATH)/bin/
+$ ./bfe -c $(go env GOPATH)/src/github.com/bfenetworks/bfe/conf/ -l ../log
+```
+
+## snap方式安装
+
+在 Linux 环境可以使用 snap 工具安装 BFE。如果系统还未安装 snap 工具，参见[安装 snap](https://snapcraft.io/docs/installing-snapd)。
+
+### 安装
+
+```bash
+$ sudo snap install --edge bfe
+```
+
+> tips: 配置文件位于 `/var/snap/bfe/common/conf/`，日志文件位于 `/var/snap/bfe/common/log/`。
+
+### 运行
+
+```bash
+$ sudo /snap/bin/bfe
+```
+
 ## docker方式安装运行
-BFE也提供了基于docker的容器镜像，可以方便的通过docker进行安装部署。
-BFE的镜像可以在docker hub中找到 *https://hub.docker.com/r/bfenetworks/bfe*
+BFE也提供了基于docker的容器镜像，可以方便地通过docker进行安装部署。
 
 ### docker环境设置
 参考 *docker.com*，设置好系统的docker环境。
 
-### 运行BFE容器
-执行以下命令可以启动一个BFE容器
+### 直接运行已有镜像
+
+当前推荐镜像源为 GitHub Container Registry：
+
 ```bash
-# docker run -d -p 8080:8080 -p 8443:8443 -p 8421:8421 bfenetworks/bfe
+$ docker run -d -p 8080:8080 -p 8443:8443 -p 8421:8421 ghcr.io/bfenetworks/bfe:latest
 ```
-![](img/docker_run.png)
 
-上述命令将运行一个BFE容器，同时把BFE容器中的三个缺省端口映射到本地。
+上述命令将运行一个 BFE 容器，并把容器内的三个默认端口映射到本地。
 
-查看容器的运行状态，可以看到容器id为7e15304bb972
-![](img/docker_ps.png)
+如需挂载本地配置和日志目录，可按如下方式运行（路径请按需修改）：
 
-如果要停止容器的运行，可以执行以下命令：
-![](img/docker_stop.png)
+```bash
+$ docker run -d \
+  -p 8080:8080 -p 8443:8443 -p 8421:8421 \
+  -v /path/to/conf:/home/work/bfe/conf \
+  -v /path/to/log:/home/work/bfe/log \
+  ghcr.io/bfenetworks/bfe:latest
+```
+
+### 从源码构建镜像
+
+在仓库根目录执行：
+
+```bash
+$ make docker
+```
+
+构建完成后会得到形如 `bfe:v1.8.5`、`bfe:v1.8.5-debug` 以及 `bfe:latest` 的镜像。
+
+如需将镜像推送到远程仓库（例如 GHCR），可使用：
+
+```bash
+$ make docker-push REGISTRY=ghcr.io/your-org
+```
+
+详细参数说明可参考 `bfe/docs/zh_cn/installation/install_using_docker.md`。
 
 
 ## BFE命令行参数
@@ -178,6 +273,7 @@ BFE的镜像可以在docker hub中找到 *https://hub.docker.com/r/bfenetworks/b
 |-d                 |打印debug日志                  |
 |-v                 |显示bfe的版本号                 |
 |-V                 |显示bfe的版相关的详细信息        |
+|-t                 |测试配置文件并退出               |
 |-h                 |显示帮助                       |
 
 

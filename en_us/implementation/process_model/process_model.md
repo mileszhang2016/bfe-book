@@ -8,7 +8,7 @@ The forwarding process of BFE is a highly concurrent network server written in G
 
 - **Network related Goroutines**
 
-  - Goroutines for listening user connections, Goroutines for processing  user connections, and Goroutines  for processing protocols.
+  - Goroutines for listening user connections, Goroutines for processing  user connections, and Goroutines  for processing protocols (HTTP/HTTPS, HTTP/2, SPDY, WebSocket, layer-4 Stream proxy, etc.).
 
   - Goroutines for establishing connection with backends, Goroutines for processing read and write with backend connections.
 
@@ -27,7 +27,9 @@ The forwarding process of BFE is a highly concurrent network server written in G
 
 The BFE forwarding instance can start one or more listening Goroutines.  If a large number of user accesses are short connections, a single Goroutine for listening only uses a single CPU core and may become a bottleneck. At this time, the throughput can be improved by properly adjusting the number of listening Goroutines.
 
-Each new user connection will be processed concurrently in an independent Goroutine for user connection processing. For the HTTP/HTTPS protocol, the Goroutines for user connection processing serially read requests and process them; For HTTP2/SPDY protocol, because the protocol supports multiplexing, requests are processed in multiple independent Goroutines for stream processing simultaneously.
+Each new user connection will be processed concurrently in an independent Goroutine for user connection processing. For the HTTP/HTTPS protocol, the Goroutines for user connection processing serially read requests and process them; For HTTP2/SPDY protocol, because the protocol supports multiplexing, requests are processed in multiple independent Goroutines for stream processing simultaneously. When AI Gateway is enabled (`EnableAiGateway`), HTTP/HTTPS requests go through the `ServeHTTPForAI` path to perform AI-specific processing such as model routing and token quota before forwarding.
+
+For the WebSocket protocol, after the HTTP upgrade negotiation completes, the connection is handed off to a dedicated WebSocket handler Goroutine that maintains a long-lived bidirectional forwarding channel between the client and the backend. For the layer-4 Stream proxy, the connection enters the corresponding Stream handler Goroutine and relays data transparently between the client and the backend.
 
 When forwarding the request to the backend and reading the response, it involves a group of Goroutines for backend connection read and write, which are responsible for writing the request data to the backend connection and reading the response data from the backend connection.
 
@@ -52,7 +54,7 @@ With Goroutines, BFE can make full use of the multi-core CPU of a single machine
 
 Due to the complexity of the forwarding process and the characteristics of rapid iterative development, potential PANIC problems are difficult to be completely discovered through offline testing. However, when PANIC is triggered in some cases, it will have a very serious impact on the stability of the forwarding cluster, for example, triggered by a specific type of request (Query of Death).
 
-Therefore, all network related Goroutines of BFE use the built-in PANIC recovery mechanism of Go language to avoid large-scale PANIC exit of BFE forwarding instances due to unknown bugs during connection/request processing.
+Therefore, key network related Goroutines of BFE (such as user connection handling, HTTP/2, WebSocket, and layer-4 Stream proxy) use the built-in PANIC recovery mechanism of Go language to avoid large-scale PANIC exit of BFE forwarding instances due to unknown bugs during connection/request processing.
 
 ```go
 // bfe_server/http_conn.go:serve()
@@ -60,11 +62,14 @@ Therefore, all network related Goroutines of BFE use the built-in PANIC recovery
 defer func() {
     if err := recover(); err != nil {
         log.Logger.Warn("panic: conn.serve(): %v, readTotal=%d,writeTotal=%d,reqNum=%d,%v\n%s",
-        c.remoteAddr, c.session.ReadTotal, c.session.WriteTotal, c.session.ReqNum,
-        err, gotrack.CurrentStackTrace(0))
-        ...
+            c.remoteAddr,
+            c.session.ReadTotal(), c.session.WriteTotal(),
+            c.session.ReqNum(),
+            err, gotrack.CurrentStackTrace(0))
+
+        proxyState.PanicClientConnServe.Inc(1)
     }
-    ...
+    c.server.connWaitGroup.Done()
 }()
 ```
 

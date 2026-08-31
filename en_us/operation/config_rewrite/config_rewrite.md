@@ -5,7 +5,7 @@ This chapter describes how to configure HTTP rewrite. This function modifies the
 In conf/bfe.conf, enable the module
 
 ```ini
-Modules = mod_write
+Modules = mod_rewrite
 ```
 
 ## Configuration
@@ -20,9 +20,14 @@ mod_rewrite.conf is the basic configuration file of the module, pointing to the 
 
 ```
 $ cat mod_rewrite.conf 
-[basic]
+[Basic]
 DataPath = mod_rewrite/rewrite.data
+
+[Log]
+OpenDebug = false
 ```
+
+`Log.OpenDebug` controls whether to output debug logs, and the default value is `false`.
 
 rewrite.data contains rewrite rules and can be loaded dynamically. The sample configuration file in the installation package is as follows:
 
@@ -81,8 +86,8 @@ Set the first section in Path to the value of Host and remove it from Path. For 
 Example:
 ```json  
 {
-    "cmd": "HOST_SET_FROM_PATH_PREFIX", 
-    "params": []
+    "Cmd": "HOST_SET_FROM_PATH_PREFIX", 
+    "Params": []
 }
 ```
 
@@ -99,8 +104,8 @@ Replace the specific suffix in the domain name. The two parameters are the suffi
 Example:
 ```json  
 {
-    "cmd": "HOST_SUFFIX_REPLACE", 
-    "params": ["net", "com"]
+    "Cmd": "HOST_SUFFIX_REPLACE", 
+    "Params": ["net", "com"]
 }
 ```
 
@@ -116,8 +121,8 @@ Set the Path to the specified value and the parameter to the new value of Path .
 Example:
 ```json  
 {
-    "cmd": "PATH_SET", 
-    "params": ["/index"]
+    "Cmd": "PATH_SET", 
+    "Params": ["/index"]
 }
 ```
 
@@ -133,8 +138,8 @@ Add a prefix for Path. The parameter is the prefix to add.
 Example:
 ```json  
 {
-    "cmd": "PATH_PREFIX_ADD", 
-    "params": ["/index"]
+    "Cmd": "PATH_PREFIX_ADD", 
+    "Params": ["/index"]
 }
 ```
 
@@ -142,7 +147,7 @@ Result:
 | | |
 |-|-|
 |Original value   | http://www.example.com/current |
-|After rewrite   | http://www.example.com/index/current |
+|After rewrite   | http://www.example.com/indexcurrent |
 
 ### PATH_PREFIX_TRIM
 Delete the Path prefix. The parameter is the prefix to delete.
@@ -150,8 +155,8 @@ Delete the Path prefix. The parameter is the prefix to delete.
 Example:
 ```json  
 {
-    "cmd": "PATH_PREFIX_TRIM", 
-    "params": ["/service"]
+    "Cmd": "PATH_PREFIX_TRIM", 
+    "Params": ["/service"]
 }
 ```
 
@@ -167,8 +172,8 @@ Add Query. The parameter specifies the key and value of the query to be added.
 Example:
 ```json  
 {
-    "cmd": "QUERY_ADD", 
-    "params": ["name", "alice"]
+    "Cmd": "QUERY_ADD", 
+    "Params": ["name", "alice"]
 }
 ```
 
@@ -185,8 +190,8 @@ Rename the query. The parameter specifies the original name and new name of the 
 Example:
 ```json  
 {
-    "cmd": "QUERY_ADD", 
-    "params": ["name", "user"]
+    "Cmd": "QUERY_RENAME", 
+    "Params": ["name", "user"]
 }
 ```
 
@@ -202,8 +207,8 @@ Delete the specified Query. The parameter specifies the name of the key.
 Example:
 ```json  
 {
-    "cmd": "QUERY_ADD", 
-    "params": ["name"]
+    "Cmd": "QUERY_DEL", 
+    "Params": ["name"]
 }
 ```
 
@@ -219,15 +224,15 @@ Delete all other keys except the specified key in Query.
 Example:
 ```json  
 {
-    "cmd": "QUERY_DEL_ALL_EXCEPT", 
-    "params": ["name"]
+    "Cmd": "QUERY_DEL_ALL_EXCEPT", 
+    "Params": ["name"]
 }
 ```
 
 Result:
 | | |
 |-|-|
-|Original value   | http://www.example.com/?name=alice?key1=value2&key2=value2 |
+|Original value   | http://www.example.com/?name=alice&key1=value2&key2=value2 |
 |After rewrite   | http://www.example.com/?name=alice |
 
 

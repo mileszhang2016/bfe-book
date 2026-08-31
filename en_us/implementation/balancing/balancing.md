@@ -18,7 +18,13 @@ Correspondingly, traffic load balancing of BFE includes two levels:
 
 ## Cluster-Level Load Balancing
 
-BFE adopts a load balancing strategy based on WRR algorithm between multiple sub-clusters of the backend cluster. See the code in bfe_balance/bal_gslb/bal_gslb.go:subClusterBalance() for algorithm implementation。
+BFE supports multiple load balancing policies among the sub-clusters of a backend cluster (configured via `GslbBasicConf.BalanceMode`, default is WRR):
+
+- WRR: Weighted Round Robin
+- WLC: Weighted Least Connection
+- EPP: External Processing Policy. BFE calls an external Envoy ext_proc gRPC service to decide the target backend; if the service returns no decision or fails, BFE falls back to the local WRR/WLC policy.
+
+See `bfe_balance/bal_gslb/bal_gslb.go` (`subClusterBalance()`, `Balance()`, `BalanceEpp()`) for algorithm implementation.
 
 The cluster-level load balancing algorithm includes the following two steps:
 
@@ -30,13 +36,15 @@ User requests may have affinity, that is, it may be required to forward specific
 
 2. The request containing a specific query is forwarded to a specific sub-cluster for processing to meet the cache friendliness
 
-In order to realize load balancing of content-aware, BFE supports the following three ways to identify requests:
+In order to realize load balancing of content-aware, BFE supports the following four ways to identify requests:
 
 1. Based on specific header or specific cookie of the request
 
 2. Based on source IP of the request
 
 3. Based on the specific header or specific cookie in the request first, and based on the source IP otherwise
+
+4. Based on the request URI (RequestURI)
 
 ```go
 // bfe_balance/bal_gslb/bal_gslb.go 
@@ -53,6 +61,9 @@ switch *bal.hashConf.HashStrategy {
 		  	if hashKey == nil {
 		  			hashKey = clientIP
 		  	}
+
+	  case cluster_conf.RequestURI:
+		  	hashKey = []byte(req.HttpRequest.RequestURI)
 }
 
 // if hashKey is empty, use random value

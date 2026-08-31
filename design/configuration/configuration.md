@@ -22,7 +22,7 @@
 
 + BFE扩展模块的配置文件
 
-  出于便于管理的目的，BFE各扩展模块的配置文件和BFE主逻辑的配置文件分开存放。对于每个扩展模块，有一个独立的配置文件目录，位于"/conf/mod_<name>/"目录下。如：/conf/mod_block/目录下是mod_block的配置文件。
+  出于便于管理的目的，BFE各扩展模块的配置文件和BFE主逻辑的配置文件分开存放。对于每个扩展模块，有一个独立的配置文件目录，位于"/conf/mod_<name>/"目录下。如：/conf/mod_block/目录下是mod_block的配置文件，/conf/mod_wasm/目录下是mod_wasmplugin的配置文件，/conf/mod_ai_route/、/conf/mod_ai_token_auth/、/conf/mod_ai_rate_limit/、/conf/mod_body_process/目录下是AI网关相关模块的配置文件。
 
 ## 常规配置 vs 动态配置
 
@@ -50,7 +50,7 @@ BFE中动态配置的实现机制如下图所示，主要包括“配置加载�
 
 例如：通过访问 http://127.0.0.1:8421/reload/gslb_data_conf，可以触发gslb.data的重新加载。
 
-出于安全的考虑，仅当从部署BFE程序的同服务器发起对这个接口的访问时，才会通过。这个限制位于Web Monitor的[实现代码](https://github.com/baidu/go-lib/blob/master/web-monitor/web_monitor/web_monitor.go)中：
+出于安全的考虑，仅当从部署BFE程序的同服务器发起对这个接口的访问时，才会通过。这个限制位于Web Monitor的[实现代码](https://github.com/bfenetworks/go-lib/blob/master/web-monitor/web_monitor/web_monitor.go)中：
 
 ```
 // source ip address allowed to do reload

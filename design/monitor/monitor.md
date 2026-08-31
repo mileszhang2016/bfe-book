@@ -58,6 +58,58 @@ BFE作为一个七层负载均衡软件，需要7*24小时的持续稳定运转�
 
 ![bfe dashboard](./bfe_dashboard.png)
 
+### 监控数据输出格式
+
+BFE监控接口支持多种输出格式，便于对接不同的监控系统。默认以JSON格式输出，可通过 `format` 参数指定其他格式：
+
+- **json**（默认）：以JSON格式返回各项指标
+- **kv**：以 `key:value` 的键值对形式返回
+- **prometheus**：以 [Prometheus](https://prometheus.io/) 可识别的文本格式返回，便于使用 Prometheus 直接采集
+
+示例：
+```
+http://<addr>:<port>/monitor/proxy_state?format=prometheus
+```
+
+### 主要监控接口
+
+BFE在 `/monitor` 路径下暴露了多类内部状态接口。访问 `/monitor` 可获取完整的指标类别列表，常见接口包括：
+
+- **路由与集群状态**
+  - `host_table_status` / `host_table_version`：租户域名表状态及版本
+  - `cluster_table_version`：集群配置版本
+  - `bal_table_status` / `bal_table_version`：负载均衡表状态及版本
+- **核心转发状态**
+  - `proxy_state` / `proxy_state_diff`：BFE主逻辑计数器绝对值及差值
+  - `bal_state` / `bal_state_diff`：负载均衡相关计数器
+  - `proxy_protocol_state` / `proxy_protocol_state_diff`：PROXY协议相关计数器
+- **协议状态**
+  - `http_state` / `http_state_diff`：HTTP状态
+  - `http2_state` / `http2_state_diff`：HTTP/2状态
+  - `spdy_state` / `spdy_state_diff`：SPDY状态
+  - `websocket_state` / `websocket_state_diff`：WebSocket状态
+  - `stream_state` / `stream_state_diff`：TLS/TCP流代理状态
+  - `tls_state` / `tls_state_diff`：TLS相关状态
+- **延迟统计**
+  - `proxy_delay`：转发处理延迟
+  - `proxy_post_delay`：后端响应后处理延迟
+  - `proxy_handshake_delay` / `proxy_handshake_full_delay` / `proxy_handshake_resume_delay`：TLS握手各阶段延迟
+- **模块与服务状态**
+  - `module_status`：各模块状态
+  - `module_handlers`：各模块注册的回调点及回调函数列表
+  - `server_stat`：BFE服务器运行状态
+  - `proxy_mem_stat`：BFE内存统计
+
+### 配置热加载接口
+
+除状态查询外，BFE监控端口还提供配置热加载接口，访问路径为 `/reload/<name>`，常用接口包括：
+
+- `server_data_conf`：重新加载server_data_conf相关配置
+- `gslb_data_conf`：重新加载GSLB配置
+- `name_conf`：重新加载名字服务配置
+- `tls_conf`：重新加载TLS配置
+- `tls_session_ticket_key`：重新加载TLS Session Ticket密钥
+
 ## 统计状态和日志的配合使用
 
 虽然监控不需要依赖日志，但是日志仍然是有用的。
@@ -71,7 +123,7 @@ BFE作为一个七层负载均衡软件，需要7*24小时的持续稳定运转�
 
 以上所介绍的BFE相关状态输出机制已经封装为独立的基础库，命名为Web Monitor。下面介绍一下Web Monitor的设计机制和使用方法。
 
-Web Monitor的代码位于[https://github.com/baidu/go-lib](https://github.com/baidu/go-lib) 中的web-monitor目录下。
+Web Monitor的代码位于[https://github.com/bfenetworks/go-lib](https://github.com/bfenetworks/go-lib) 中的web-monitor目录下。
 
 ### 概述
 
@@ -101,16 +153,16 @@ Web Monitor中主要提供以下3类支持：
 + 计量变量（Gauge）：可以增加、减少，也可以直接改变取值
 + 状态变量（State）：可以设置一个字符串作为状态，如“on”、“off”、“red”、“green”
 
-以上几种变量对应的类型定义可以查看[https://github.com/baidu/go-lib](https://github.com/baidu/go-lib) 中 [/web-monitor/metrics](https://github.com/baidu/go-lib/tree/master/web-monitor/metrics)目录下的counter.go、gauge.go和state.go。
+以上几种变量对应的类型定义可以查看[https://github.com/bfenetworks/go-lib](https://github.com/bfenetworks/go-lib) 中 [/web-monitor/metrics](https://github.com/bfenetworks/go-lib/tree/master/web-monitor/metrics)目录下的counter.go、gauge.go和state.go。
 
 #### 差值计算
 
-对于计数器变量，Web Monitor还提供了“获取指定时间周期内的差值”的能力。比如，对于"CLIENT_REQ_SERVED"，获取BFE程序启动后一共处理了多少请求并没有太大意义，我们更希望得到“最近20秒内服务了多少请求”。获取差值的能力实现在[/web-monitor/metrics](https://github.com/baidu/go-lib/tree/master/web-monitor/metrics)的metrics.go中。Metrics的用法如下：
+对于计数器变量，Web Monitor还提供了“获取指定时间周期内的差值”的能力。比如，对于"CLIENT_REQ_SERVED"，获取BFE程序启动后一共处理了多少请求并没有太大意义，我们更希望得到“最近20秒内服务了多少请求”。获取差值的能力实现在[/web-monitor/metrics](https://github.com/bfenetworks/go-lib/tree/master/web-monitor/metrics)的metrics.go中。Metrics的用法如下：
 
 (1) 定义包含统计变量的数据类型
 
 ```
-import "github.com/baidu/go-lib/web-monitor/metrics"
+import "github.com/bfenetworks/go-lib/web-monitor/metrics"
 
 // define counter struct type
 type ServerState {
@@ -200,7 +252,7 @@ Delay Counter的用法如下：
 (1) 定义和初始化Delay Counter
 
 ```
-import "github.com/baidu/go-lib/web-monitor/delay_counter"
+import "github.com/bfenetworks/go-lib/web-monitor/delay_counter"
 
 ProxyDelay = new(delay_counter.DelayRecent)
 	
@@ -223,7 +275,7 @@ ProxyDelay.FormatOutput(params)
 BFE内嵌的监控专用Web Server，在[/bfe_server](https://github.com/bfenetworks/bfe/blob/develop/bfe_server)的web_server.go中定义：
 
 ```
-func newBfeMonitor(srv *BfeServer, monitorPort int) (*BfeMonitor, error) {
+func newBfeMonitor(srv *BfeServer, monitorPort int, monitorAddr string) (*BfeMonitor, error) {
 	m := &BfeMonitor{nil, nil, srv}
 
 	// initialize web handlers
@@ -233,13 +285,19 @@ func newBfeMonitor(srv *BfeServer, monitorPort int) (*BfeMonitor, error) {
 		return nil, err
 	}
 
-	// initialize web server
-	m.WebServer = web_monitor.NewMonitorServer("bfe", srv.Version, monitorPort)
+	// initialize web server, bind to loopback when an address is configured
+	if monitorAddr != "" {
+		m.WebServer = web_monitor.NewMonitorServerWithAddr("bfe", srv.Version, monitorAddr, monitorPort)
+	} else {
+		m.WebServer = web_monitor.NewMonitorServer("bfe", srv.Version, monitorPort)
+	}
 	m.WebServer.HandlersSet(m.WebHandlers)
 
 	return m, nil
 }
 ```
+
+其中 `monitorAddr` 为监控端口的监听地址，可通过 `bfe.conf` 中的 `Server.MonitorAddr` 配置。若未配置（为空字符串），则监听所有接口；配置为 `127.0.0.1` 等回环地址时，监控接口仅对本机开放，可增强安全性。此外，`Server.MonitorEnabled` 用于控制是否启用监控服务，`Server.MonitorInterval` 用于设置监控差值统计的周期（默认20秒）。
 
 上面的代码中，建立了维护回调函数的变量m.WebHandlers，也建立了Web Server的变量m.WebServer。
 

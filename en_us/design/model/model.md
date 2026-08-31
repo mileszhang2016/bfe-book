@@ -32,25 +32,76 @@ In BFE, there are the following basic concepts:
 
 The following figure illustrates the relationship between these concepts with an example. It includes 2 tenants. Tenant 1 is configured with two clusters (Cluster A and Cluster B), which have two sub clusters and one sub cluster respectively. Each sub cluster has 1-3 instances. Tenant 2 only has one cluster (Cluster C) configured. Cluster C has two sub clusters, each with two instances.
 
-![concept](./concepts.png)
+```text
+Tenant 1 (Product/Tenant)
+├── Cluster A (Cluster)
+│   ├── Sub Cluster A.idc1 (Sub Cluster)
+│   │   ├── Instance A-01.idc1
+│   │   └── Instance A-02.idc1
+│   └── Sub Cluster A.idc2 (Sub Cluster)
+│       └── Instance A-03.idc2
+└── Cluster B (Cluster)
+    └── Sub Cluster B.idc1 (Sub Cluster)
+        ├── Instance B-01.idc1
+        ├── Instance B-02.idc1
+        └── Instance B-03.idc1
+
+Tenant 2 (Product/Tenant)
+└── Cluster C (Cluster)
+    ├── Sub Cluster C.idc1 (Sub Cluster)
+    │   ├── Instance C-01.idc1
+    │   └── Instance C-02.idc1
+    └── Sub Cluster C.idc2 (Sub Cluster)
+        ├── Instance C-01.idc2
+        └── Instance C-02.idc2
+```
 
 ## Traffic Forwarding
 
-![forward model](./traffic-forward.png)
+The figure below is an example to illustrate the BFE forwarding process. This is a multi data center scenario, including three data centers (IDC1 to IDC3), each of which has an internet PoP (Point of Presence). The three data centers may be in adjacent areas (generally called Region) or not in the same region.
 
-The figure above is an example to illustrate the BFE forwarding process.
+```text
+                                ┌─────────┐
+                                │  Client │
+                                └────┬────┘
+                                     │
+                         Step 1-2: DNS returns 6.6.6.6
+                                     ▼
+┌────────────────────────────────────────────────────────────────────┐
+│                         Internet Entry Layer                        │
+│         IDC1:6.6.6.6        IDC2:7.7.7.7        IDC3:8.8.8.8       │
+└────────────────────────────────────────────────────────────────────┘
+                    │                  │                  │
+                    ▼                  ▼                  ▼
+              ┌─────────┐        ┌─────────┐        ┌─────────┐
+              │ L4 LB   │        │ L4 LB   │        │ L4 LB   │
+              │ (IDC1)  │        │ (IDC2)  │        │ (IDC3)  │
+              └────┬────┘        └────┬────┘        └────┬────┘
+                   │                  │                  │
+                   ▼                  ▼                  ▼
+              ┌─────────┐        ┌─────────┐        ┌─────────┐
+              │ BFE Cluster│       │ BFE Cluster│       │ BFE Cluster│
+              │ (IDC1)  │        │ (IDC2)  │        │ (IDC3)  │
+              └────┬────┘        └────┬────┘        └────┬────┘
+                   │                  │                  │
+                   ▼                  ▼                  ▼
+         ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+         │ demo-static.idc1│ │ demo-static.idc2│ │ demo-static.idc3│
+         │   (Sub Cluster) │ │   (Sub Cluster) │ │   (Sub Cluster) │
+         └─────────────────┘ └─────────────────┘ └─────────────────┘
+```
 
-This is a multi data center scenario, including three data centers (IDC1 to IDC3), each of which has an internet PoP(Point of Presence). The three data centers may be in adjacent areas (generally called Region) or not in the same region.
+In the topology above, when a client accesses demo.example.com, DNS returns the entry IP of IDC1 (6.6.6.6) based on the client's location. The request reaches a BFE instance in IDC1 via the layer-4 load balancer. After BFE completes the layer-7 forwarding decision, it sends the request to the target sub cluster within IDC1. The detailed processing inside a BFE instance is explained below.
 
-In each data center, a layer-4 load balancing cluster is deployed, as well as a layer-7 load balancing cluster based on BFE. In general scenarios, BFE exists as RS (Real Server) of  layer-4 load balancer. In a BFE cluster, there are generally more than two BFE instances on different servers. When a BFE instance fails (due to the failure of server hardware, operating system, or BFE itself), the Layer 4 load balancer system can automatically remove the problematic instance to achieve high availability.
+Here we assume that there is a service providing static web pages, named demo-static. This service is deployed in three data centers and is organized into three independent sub clusters (demo-static.idc1 to demo-static.idc3). demo-static uses the domain name demo.example.com to provide services. For each of the three data centers, an external IP address is assigned, assuming that they are 6.6.6.6, 7.7.7.7 and 8.8.8.8 respectively (Note: these domain names and IP addresses are fictitious and are only used to explain the operation mechanism of BFE).
 
-Here we assume that there is a service providing static web page, named demo-static. This service is deployed in three data centers and is organized into three independent sub clusters (demo-static. idc1 to demo-static. idc3).
-
-Demo-static uses the domain name demo.example.com to provide services. For each of the three data centers,  an external IP address is assigned, assuming that they are 6.6.6.6, 7.7.7.7 and 8.8.8.8 respectively (Note: these domain names and IP addresses are fictitious and are only used to explain the operation mechanism of BFE).
+In each data center, a layer-4 load balancing cluster is deployed, as well as a layer-7 load balancing cluster based on BFE. In general scenarios, BFE exists as RS (Real Server) of layer-4 load balancer. In a BFE cluster, there are generally more than two BFE instances on different servers. When a BFE instance fails (due to the failure of server hardware, operating system, or BFE itself), the layer-4 load balancer system can automatically remove the problematic instance to achieve high availability.
 
 To access the demo-static service, the client must first resolve the domain name to an appropriate IP address. In steps 1 and 2 of the above figure, according to the location of the client, the IP address returned by the intelligent DNS is 6.6.6.6.
 
-Then the client initiates a TCP connection to port 80 of IP address 6.6.6.6. To make the case simple, it is assumed that the client and server use the normal HTTP protocol to interact instead of the HTTPS protocol. The client establishes a TCP connection with a BFE instance in the BFE cluster through the layer-4 load balancer system. One or more HTTP requests can be sent within a TCP connection. The number of HTTP requests sent in a connection is called the Connection Reuse Rate. Before HTTP/2, the connection reuse rate was 2-3 in general, that is, a TCP connection was closed after 2-3 HTTP requests were sent. After the advent of HTTP/2, the connection reuse rate has been greatly improved.
+Then the client initiates a TCP connection to port 80 of IP address 6.6.6.6. To make the case simple, it is assumed that the client and server use the normal HTTP protocol to interact instead of the HTTPS protocol. The client establishes a TCP connection with a BFE instance in the BFE cluster through the layer-4 load balancer system. BFE supports multiple access protocols, including HTTP, HTTPS, HTTP/2, WebSocket, SPDY, gRPC, FastCGI, etc. For encrypted traffic, BFE completes the TLS/SSL handshake and offloading.
+
+One or more HTTP requests can be sent within a TCP connection. The number of HTTP requests sent in a connection is called the Connection Reuse Rate. Before HTTP/2, the connection reuse rate was 2-3 in general, that is, a TCP connection was closed after 2-3 HTTP requests were sent. After the advent of HTTP/2, the connection reuse rate has been greatly improved.
 
 After the HTTP request arrives at BFE, steps 5 to 8 are the key steps for BFE processing.
 
@@ -79,6 +130,21 @@ After the HTTP request arrives at BFE, steps 5 to 8 are the key steps for BFE pr
   In this case, demo-static-01.idc1 is finally selected to process the request.
 
 Then, the request is sent to the backend instance demo-static-01.idc1 (step 9). BFE receives the response from the backend instance (step 10), and returns the response to the client through the layer-4 load balancer system (steps 11 and 12).
+
+## Module Callbacks During Forwarding
+
+BFE has a flexible module plugin mechanism. Multiple callback points are set on the critical path of request forwarding. Each module can register callback functions for these points. When a request reaches a callback point, BFE executes all registered callback functions in order, enabling request filtering, modification, authentication, rate limiting, logging, and other functions. For details of the module mechanism, please refer to [Chapter 10: BFE Module Plugin Mechanism](../module/module.md).
+
+The callback points corresponding to the above forwarding process are as follows:
+
+- **HandleBeforeLocation**: Executed before looking up the tenant (product). Early-stage processing can be performed here, such as identifying the client's real IP, generating a log ID, blocking requests, etc.
+- **HandleFoundProduct**: Executed after the tenant is determined and before looking up the cluster. Tenant-level processing can be performed here, such as API Key authentication and quota binding.
+- **HandleAfterLocation**: Executed after the cluster is determined and before selecting the backend. Cluster-level processing can be performed here, such as URI rewriting, header modification, redirection, etc.
+- **HandleForward**: Executed after the sub cluster and instance are selected and before the request is actually forwarded.
+- **HandleReadResponse**: Executed after the response from the backend is read. Response processing can be performed here, such as compression and body parsing.
+- **HandleRequestFinish**: Executed after the request is fully processed. Finalization work can be performed here, such as logging, quota deduction, and access statistics.
+
+Based on this mechanism, BFE not only has rich built-in extension modules (such as access log, WAF, redirect, rate limiting, distributed tracing, etc.), but also supports flexible extension of new traffic management capabilities through WASM plugins and AI gateway-related modules (such as AI routing, token authentication, AI rate limiting, etc.).
 
 ## Discussion on Multi Tenant Mechanism
 

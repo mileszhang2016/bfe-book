@@ -1,19 +1,20 @@
 # Layout of BFE Code Base
 
-The latest code of BFE can be downloaded from the BFE open source project release page https://github.com/bfenetworks/bfe/releases. This chapter will introduce BFE v1.0.0 as an example.
+The latest code of BFE can be downloaded from the BFE open source project release page https://github.com/bfenetworks/bfe/releases. This chapter will introduce BFE v1.8.5 as an example.
 
 At the top level of the code directory, you can see that BFE contains the following directories or files:
 
 ```bash
 $ ls bfe/
-ADOPTERS.md		MAINTAINERS.md		bfe_basic		bfe_modules		bfe_util
-CHANGELOG.md		Makefile		bfe_bufio		bfe_net			bfe_websocket
-CODE_OF_CONDUCT.md	NOTICE			bfe_config		bfe_proxy		conf
-CONTRIBUTING.md		README.md		bfe_debug		bfe_route		docs
-CONTRIBUTORS.md		SECURITY.md		bfe_fcgi		bfe_server		go.mod
-Dockerfile		VERSION			bfe_http		bfe_spdy		go.sum
-GOVERNANCE.md		bfe.go			bfe_http2		bfe_stream		snap
-LICENSE			bfe_balance		bfe_module		bfe_tls			staticcheck.conf
+ADOPTERS.md		CHANGELOG.md		CODE_OF_CONDUCT.md	CONTRIBUTING.md		CONTRIBUTORS.md
+AGENTS.md		Dockerfile		GOVERNANCE.md		LICENSE			MAINTAINERS.md
+Makefile		NOTICE			README-CN.md		README.md		SECURITY.md
+VERSION			bfe.go			go.mod			go.sum			revive.toml		release_local.sh
+bfe_balance		bfe_basic		bfe_bufio		bfe_config		bfe_debug
+bfe_fcgi		bfe_http		bfe_http2		bfe_module		bfe_modules
+bfe_net			bfe_proxy		bfe_route		bfe_server		bfe_spdy
+bfe_stream		bfe_tls			bfe_util		bfe_wasmplugin		bfe_websocket
+conf			docs			examples		snap			tests
 ```
 
 The hierarchical structure of each directory is as follows:
@@ -38,7 +39,8 @@ The functional modules corresponding to each directory in top-down order are des
 
 ## Extension Modules
 - `bfe_module`: code for BFE plugin framework
-- `bfe_modules`: code for BFE extension modules
+- `bfe_modules`: code for BFE extension modules, including access control, redirect, rewrite, WAF, rate limiting, AI gateway and WASM plugin modules
+- `bfe_wasmplugin`: code for BFE WASM plugin runtime and ABI adaptation
 
 ## Service Framework
 - `bfe_server`: main parts of BFE server

@@ -64,6 +64,58 @@ Through the above methods, BFE exposes thousands of internal status information,
 
 ![bfe dashboard](./bfe_dashboard.png)
 
+### Output Formats of Monitoring Data
+
+BFE monitor interfaces support multiple output formats to integrate with different monitoring systems. JSON is the default, and other formats can be specified via the `format` parameter:
+
+- **json** (default): returns metrics in JSON format
+- **kv**: returns metrics as `key:value` pairs
+- **prometheus**: returns metrics in [Prometheus](https://prometheus.io/) exposition format, allowing direct scraping by Prometheus
+
+Example:
+```
+http://<addr>:<port>/monitor/proxy_state?format=prometheus
+```
+
+### Main Monitor Interfaces
+
+BFE exposes multiple internal status interfaces under `/monitor`. Accessing `/monitor` returns a complete list of metric categories. Common interfaces include:
+
+- **Routing and cluster status**
+  - `host_table_status` / `host_table_version`: tenant host table status and version
+  - `cluster_table_version`: cluster configuration version
+  - `bal_table_status` / `bal_table_version`: load balancing table status and version
+- **Core forwarding status**
+  - `proxy_state` / `proxy_state_diff`: absolute and diff values of BFE main logic counters
+  - `bal_state` / `bal_state_diff`: load balancing related counters
+  - `proxy_protocol_state` / `proxy_protocol_state_diff`: PROXY protocol related counters
+- **Protocol status**
+  - `http_state` / `http_state_diff`: HTTP status
+  - `http2_state` / `http2_state_diff`: HTTP/2 status
+  - `spdy_state` / `spdy_state_diff`: SPDY status
+  - `websocket_state` / `websocket_state_diff`: WebSocket status
+  - `stream_state` / `stream_state_diff`: TLS/TCP stream proxy status
+  - `tls_state` / `tls_state_diff`: TLS related status
+- **Latency statistics**
+  - `proxy_delay`: forwarding processing latency
+  - `proxy_post_delay`: post-backend-response processing latency
+  - `proxy_handshake_delay` / `proxy_handshake_full_delay` / `proxy_handshake_resume_delay`: TLS handshake latency at each stage
+- **Module and service status**
+  - `module_status`: status of each module
+  - `module_handlers`: callback points and callback functions registered by each module
+  - `server_stat`: BFE server runtime status
+  - `proxy_mem_stat`: BFE memory statistics
+
+### Configuration Hot-Reload Interfaces
+
+In addition to status queries, the BFE monitor port provides configuration hot-reload interfaces under `/reload/<name>`. Common interfaces include:
+
+- `server_data_conf`: reload server_data_conf related configurations
+- `gslb_data_conf`: reload GSLB configuration
+- `name_conf`: reload name service configuration
+- `tls_conf`: reload TLS configuration
+- `tls_session_ticket_key`: reload TLS Session Ticket key
+
 ## Combination of Internal Status and Log
 
 Although monitoring based on internal status does not rely on logs, logs are still useful.
@@ -78,7 +130,7 @@ For BFE log mechanism, please refer to "[Log Mechanism](../log/log. md)".
 
 The status monitor mechanism described above used in BFE has been encapsulated as an independent basic library, named as Web Monitor. The following describes the design mechanism and usage of Web Monitor.
 
-The code for Web Monitor is located at [https://github.com/baidu/go-lib](https://github.com/baidu/go-lib) , in the web-monitor directory.
+The code for Web Monitor is located at [https://github.com/bfenetworks/go-lib](https://github.com/bfenetworks/go-lib) , in the web-monitor directory.
 
 ### Introduction
 
@@ -110,18 +162,18 @@ In the internal status maintenance, the following scenarios are considered:
 
 + State variable: You can set a string as the state, such as "on", "off", "red", "green"
 
-The definitions of the above type variables can be viewed in counter.go, gage.go and state.go in the directory [/web monitor/metrics](https://github.com/baidu/go-lib/tree/master/web-monitor/metrics) of [https://github.com/baidu/go-lib](https://github.com/baidu/go-lib).
+The definitions of the above type variables can be viewed in counter.go, gauge.go and state.go in the directory [/web-monitor/metrics](https://github.com/bfenetworks/go-lib/tree/master/web-monitor/metrics) of [https://github.com/bfenetworks/go-lib](https://github.com/bfenetworks/go-lib).
 
 #### Difference Calculation
 
-For counter variables, Web Monitor also provides the ability to "get the difference within a specified time period". For example, for "CLIENT_REQ_SERVED", it doesn't make much sense to get the total number of requests processed after the BFE program is started. We prefer to get "how many requests have been serviced in the last 20 seconds". The ability to obtain the difference is realized in metrics. go in [/web monitor/metrics](https://github.com/baidu/go-lib/tree/master/web-monitor/metrics). 
+For counter variables, Web Monitor also provides the ability to "get the difference within a specified time period". For example, for "CLIENT_REQ_SERVED", it doesn't make much sense to get the total number of requests processed after the BFE program is started. We prefer to get "how many requests have been serviced in the last 20 seconds". The ability to obtain the difference is realized in metrics.go in [/web-monitor/metrics](https://github.com/bfenetworks/go-lib/tree/master/web-monitor/metrics). 
 
 The usage of Metrics is as follows:
 
 (1) Define the data type containing status variables
 
 ```
-import "github.com/baidu/go-lib/web-monitor/metrics"
+import "github.com/bfenetworks/go-lib/web-monitor/metrics"
 
 // define counter struct type
 type ServerState {
@@ -213,7 +265,7 @@ The usage of Delay Counter is as follows:
 (1) Define and initialize the Delay Counter
 
 ```
-import "github.com/baidu/go-lib/web-monitor/delay_counter"
+import "github.com/bfenetworks/go-lib/web-monitor/delay_counter"
 
 ProxyDelay = new(delay_counter.DelayRecent)
 	
@@ -235,10 +287,10 @@ ProxyDelay.FormatOutput(params)
 
 ### Establish the Dedicated Web Server
 
-The dedicated Web Server embeded in BFE, is defined in web_server.go in [/bfe_server](https://github.com/bfenetworks/bfe/blob/develop/bfe_server ):
+The dedicated Web Server embedded in BFE, is defined in web_server.go in [/bfe_server](https://github.com/bfenetworks/bfe/blob/develop/bfe_server):
 
 ```
-func newBfeMonitor(srv *BfeServer, monitorPort int) (*BfeMonitor, error) {
+func newBfeMonitor(srv *BfeServer, monitorPort int, monitorAddr string) (*BfeMonitor, error) {
 	m := &BfeMonitor{nil, nil, srv}
 
 	// initialize web handlers
@@ -248,13 +300,19 @@ func newBfeMonitor(srv *BfeServer, monitorPort int) (*BfeMonitor, error) {
 		return nil, err
 	}
 
-	// initialize web server
-	m.WebServer = web_monitor.NewMonitorServer("bfe", srv.Version, monitorPort)
+	// initialize web server, bind to loopback when an address is configured
+	if monitorAddr != "" {
+		m.WebServer = web_monitor.NewMonitorServerWithAddr("bfe", srv.Version, monitorAddr, monitorPort)
+	} else {
+		m.WebServer = web_monitor.NewMonitorServer("bfe", srv.Version, monitorPort)
+	}
 	m.WebServer.HandlersSet(m.WebHandlers)
 
 	return m, nil
 }
 ```
+
+The `monitorAddr` parameter specifies the listen address for the monitor port, configured via `Server.MonitorAddr` in `bfe.conf`. If left empty, the monitor listens on all interfaces; setting it to `127.0.0.1` restricts the monitor to localhost and improves security. In addition, `Server.MonitorEnabled` controls whether the monitor service is enabled, and `Server.MonitorInterval` sets the diff calculation interval (default 20 seconds).
 
 In the above code, the variable **m.WebHandlers** to maintain the callback function is established, and the variable **m.WebServer** for the Web Server is also established.
 

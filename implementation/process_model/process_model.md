@@ -7,7 +7,7 @@ BFE系统的转发实例由一组协同工作的进程组成（详见[BFE简介]
 BFE的转发进程是由Go语言编写、基于Go协程实现的高并发网络服务器。BFE的转发进程中包含了几类重要的协程:
 
 - **网络相关协程**
-   - 用户连接的监听协程、用户连接的处理协程，以及协议相关的请求处理协程。
+   - 用户连接的监听协程、用户连接的处理协程，以及协议相关的请求处理协程（HTTP/HTTPS、HTTP/2、SPDY、WebSocket、四层 Stream 代理等）。
    - 后端连接的建立协程、后端连接的读写协程
 
 - **管理相关协程**
@@ -22,7 +22,9 @@ BFE的转发进程是由Go语言编写、基于Go协程实现的高并发网络�
 
 BFE转发实例可以启动一个或多个监听协程。如果用户访问大量是短连接，单个监听协程仅使用的单个CPU核并可能成为瓶颈。这时可以通过适当调节监听协程数量来提升吞吐。
 
-每个新到的用户连接将在独立的用户连接处理协程中并发处理。对于HTTP/HTTPS协议，用户连接处理协程串行读取请求并处理；对于HTTP2/SPDY协议，由于协议支持多路复用，在多个独立的流处理协程中并发处理请求。
+每个新到的用户连接将在独立的用户连接处理协程中并发处理。对于HTTP/HTTPS协议，用户连接处理协程串行读取请求并处理；对于HTTP2/SPDY协议，由于协议支持多路复用，在多个独立的流处理协程中并发处理请求。当开启 AI Gateway（`EnableAiGateway`）时，HTTP/HTTPS 请求会进入 `ServeHTTPForAI` 处理路径，完成模型路由、Token 配额等 AI 相关处理后再转发。
+
+对于WebSocket协议，在完成HTTP升级协商后，连接会切换到独立的WebSocket处理协程，在客户端与后端之间维持长连接双向转发。对于四层Stream代理，连接会进入对应的Stream处理协程，直接在客户端与后端之间进行数据透传。
 
 在向后端实例转发请求并读取响应时，涉及到一组后端连接读写协程，分别负责将请求数据写往后端连接、从后端连接读取响应数据。
 
@@ -49,7 +51,7 @@ BFE协程可以充分利用单机的多核CPU提升并发量及吞吐。但基�
 
 由于转发程序的复杂性及快速迭代特点，潜在PANIC问题难以通过线下测试完全被发现。但在一些情况下触发PANIC后，会对转发集群稳定性带来非常严重的影响，例如由特定类型请求（Query of Death）触发。
 
-因此，BFE所有网络相关协程都利用了Go语言内置的PANIC恢复机制，避免在连接/请求处理过程中由于未知Bug导致BFE转发实例大规模PANIC退出。
+因此，BFE的关键网络相关协程（如用户连接处理、HTTP/2、WebSocket、四层 Stream 代理等）均利用了Go语言内置的PANIC恢复机制，避免在连接/请求处理过程中由于未知Bug导致BFE转发实例大规模PANIC退出。
 
 ```go
 // bfe_server/http_conn.go:serve()
@@ -57,11 +59,14 @@ BFE协程可以充分利用单机的多核CPU提升并发量及吞吐。但基�
 defer func() {
     if err := recover(); err != nil {
         log.Logger.Warn("panic: conn.serve(): %v, readTotal=%d,writeTotal=%d,reqNum=%d,%v\n%s",
-        c.remoteAddr, c.session.ReadTotal, c.session.WriteTotal, c.session.ReqNum,
-        err, gotrack.CurrentStackTrace(0))
-        ...
+            c.remoteAddr,
+            c.session.ReadTotal(), c.session.WriteTotal(),
+            c.session.ReqNum(),
+            err, gotrack.CurrentStackTrace(0))
+
+        proxyState.PanicClientConnServe.Inc(1)
     }
-    ...
+    c.server.connWaitGroup.Done()
 }()
 ```
 

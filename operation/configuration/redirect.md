@@ -15,12 +15,16 @@ $ ls
 mod_redirect.conf	redirect.data
 ```
 
-mod_redirect.conf为模块基础配置文件，指向重定向规则文件，通常无需修改。
+mod_redirect.conf为模块基础配置文件，指向重定向规则文件。
 ```
 $ cat mod_redirect.conf 
 [basic]
 DataPath = mod_redirect/redirect.data
+
+[Log]
+OpenDebug = false
 ```
+其中，`Log.OpenDebug` 用于控制是否输出调试日志（默认关闭），通常无需修改。
 
 redirect.data 包含重定向规则，可动态加载。安装包中的示例中的配置文件如下：
 
@@ -45,6 +49,10 @@ redirect.data 包含重定向规则，可动态加载。安装包中的示例中
 
 ```
 上述配置为产品线*example_product*中增加了一个规则：对满足条件"Cond"（请求路径的前缀为“/redirect”）的请求，执行"Actions"动作（重定向到https://example.org），返回HTTP响应码为301。
+
+说明：
+- 每条规则中的"Actions"目前仅支持配置一个动作。
+- "Status"为返回给客户端的HTTP重定向状态码，通常为301、302、303、307、308等合法HTTP重定向状态码。
 
 ## 重定向动作
 "Actions"中的"Cmd"指示了如何设置重定向中的URL。
@@ -88,7 +96,7 @@ redirect.data 包含重定向规则，可动态加载。安装包中的示例中
 <br />
 
 ### URL_PREFIX_ADD
-设置重定向URL为当前URL加上特定前缀。参数为需要增加的前缀。
+将指定前缀与原始URI（path+query）拼接后作为重定向URL。参数为需要增加的前缀。
 
 示例：
 ```json    

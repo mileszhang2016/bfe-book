@@ -2,11 +2,15 @@
 This chapter will introduce the download and installation of BFE in detail to help you understand how to run BFE services.
 
 ## Installation of BFE
-BFE supports multiple installation methods. This chapter will introduce the following three methods:
+BFE supports multiple installation methods. This chapter will introduce the following five methods:
 
 * Software package download and installation
 
 * Source code compilation and installation
+
+* go installation
+
+* snap installation
 
 * Docker installation
 
@@ -23,22 +27,22 @@ The download address is as follows:
 You can select the software package according to the type of operating system.
 
 ### Download BFE Package
-Take the Linux environment as an example, download version 1.0.0 of BFE.
+Take the Linux environment as an example, download version 1.8.5 of BFE.
 
-On the above download page, find "BFE v1.0.0" and click to expand "Asserts", as shown below:
+On the above download page, find "BFE v1.8.5" and click to expand "Asserts", as shown below:
 
 ![](v100_assert.png)
 
-Click to download the compressed package named "bfe_1.0.0_linux_amd64. tar. gz".
+Click to download the compressed package named "bfe_1.8.5_linux_amd64. tar. gz".
 
 ### Content in BFE Software Package
 
-Unzip the downloaded file bfe_ 1.0.0_ linux_ amd64.tar.gz:
+Unzip the downloaded file bfe_ 1.8.5_ linux_ amd64.tar.gz:
 
 ```
-sh-4.2# tar zxf bfe_1.0.0_linux_amd64.tar.gz 
+sh-4.2# tar zxf bfe_1.8.5_linux_amd64.tar.gz 
 sh-4.2# 
-sh-4.2# cd bfe_1.0.0_linux_amd64
+sh-4.2# cd bfe_1.8.5_linux_amd64
 sh-4.2# 
 sh-4.2# ls 
 CHANGELOG.md	LICENSE		README.md	bin		conf
@@ -57,12 +61,42 @@ bfe
 
 ```
 sh-4.2$ ls conf
-bfe.conf		mod_block		mod_header		mod_static		server_data_conf
-cluster_conf		mod_compress		mod_key_log		mod_tag			tls_conf
-mod_access		mod_cors		mod_markdown		mod_trace
-mod_auth_basic		mod_doh			mod_prison		mod_trust_clientip
-mod_auth_jwt		mod_errors		mod_redirect		mod_userid
-mod_auth_request	mod_geo			mod_rewrite		mod_waf
+bfe.conf
+cluster_conf
+mod_access
+mod_access_pb3
+mod_ai_rate_limit
+mod_ai_route
+mod_ai_token_auth
+mod_auth_basic
+mod_auth_jwt
+mod_auth_request
+mod_block
+mod_body_process
+mod_compress
+mod_cors
+mod_doh
+mod_errors
+mod_geo
+mod_header
+mod_key_log
+mod_markdown
+mod_prison
+mod_redirect
+mod_rewrite
+mod_session_sticky
+mod_static
+mod_tag
+mod_tcp_keepalive
+mod_trace
+mod_trust_clientip
+mod_unified_waf
+mod_userid
+mod_waf
+mod_wasm
+server_data_conf
+tls_conf
+wasm_plugin
 ```
 
 ### Start BFE Service
@@ -101,8 +135,9 @@ The BFE source code is completely open source on github.com. You can also instal
 
 ### Environment preparation
 - Environmental requirements
-  - golang 1.13+
+  - golang 1.22+
   - git 2.0+
+  - glibc-static 2.17+ (required for static linking on Linux)
 
 + Go language environment preparation
 
@@ -148,31 +183,89 @@ $ cd output/bin/
 $ ./bfe -c ../conf -l ../log
 ```
 
-## Docker Installation
-BFE also provides container image based on docker, which can be easily installed and deployed through docker.
+## go Installation
 
-The image of BFE can be found in the docker hub *https://hub.docker.com/r/bfenetworks/bfe*
+### Environment preparation
+- golang 1.22+
 
-### Set up Docker Environment
-Refer to *docker. com* to set up the system's docker environment.
-
-### Start BFE Container
-Execute the following command to start a BFE container
+### Installation
 
 ```bash
-# docker run -d -p 8080:8080 -p 8443:8443 -p 8421:8421 bfenetworks/bfe
+$ go install github.com/bfenetworks/bfe@latest
 ```
-![](docker_run.png)
 
-The above command will run a BFE container and map the three default ports in the BFE container to the local.
+The executable file is located at `$(go env GOPATH)/bin/bfe`.
 
-View the running status of the container. You can see that the container ID is 7e15304bb972
+> Tips: If a timeout error occurs, please set GOPROXY and try again.
 
-![](docker_ps.png)
+### Run
 
-If you want to stop the container, you can execute the following command:
+```bash
+$ cd $(go env GOPATH)/bin/
+$ ./bfe -c $(go env GOPATH)/src/github.com/bfenetworks/bfe/conf/ -l ../log
+```
 
-![](docker_stop.png)
+## snap Installation
+
+On Linux, BFE can be installed using snap. If snap is not installed, see [Installing snapd](https://snapcraft.io/docs/installing-snapd).
+
+### Installation
+
+```bash
+$ sudo snap install --edge bfe
+```
+
+> Tips: Configuration files are located at `/var/snap/bfe/common/conf/`, and log files are at `/var/snap/bfe/common/log/`.
+
+### Run
+
+```bash
+$ sudo /snap/bin/bfe
+```
+
+## Docker Installation
+BFE also provides container images based on docker, which can be easily installed and deployed through docker.
+
+### Set up Docker Environment
+Refer to *docker.com* to set up the system's docker environment.
+
+### Run an existing image
+
+The recommended image source is GitHub Container Registry:
+
+```bash
+$ docker run -d -p 8080:8080 -p 8443:8443 -p 8421:8421 ghcr.io/bfenetworks/bfe:latest
+```
+
+The above command runs a BFE container and maps the three default ports to the host.
+
+To mount local configuration and log directories (modify paths as needed):
+
+```bash
+$ docker run -d \
+  -p 8080:8080 -p 8443:8443 -p 8421:8421 \
+  -v /path/to/conf:/home/work/bfe/conf \
+  -v /path/to/log:/home/work/bfe/log \
+  ghcr.io/bfenetworks/bfe:latest
+```
+
+### Build image from source
+
+In the repository root directory, run:
+
+```bash
+$ make docker
+```
+
+After building, images such as `bfe:v1.8.5`, `bfe:v1.8.5-debug`, and `bfe:latest` will be available.
+
+To push the image to a remote registry (e.g., GHCR), use:
+
+```bash
+$ make docker-push REGISTRY=ghcr.io/your-org
+```
+
+For detailed parameters, refer to `bfe/docs/en_us/installation/install_using_docker.md`.
 
 
 ## BFE Command Line
@@ -187,6 +280,7 @@ In the above section, we used the most commonly used command line options *- c* 
 |-d                 |Print debug logs. By default, this flag is set false.                  |
 |-v                 |Display bfe version and exit. By default, this flag is set false.                 |
 |-V                 |Display verbose version information and exit. By default, this flag is set false.        |
+|-t                 |Test configuration files and exit. By default, this flag is set false.                 |
 |-h                 |Display help information and exit. By default, this flag is set false.                       |
 
 

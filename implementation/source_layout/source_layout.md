@@ -1,19 +1,20 @@
 # BFE的代码组织
 
-BFE最新的代码可以从BFE开源项目发布页面 https://github.com/bfenetworks/bfe/releases 下载。本章将以BFE v1.0.0版本为例介绍BFE。
+BFE最新的代码可以从BFE开源项目发布页面 https://github.com/bfenetworks/bfe/releases 下载。本章将以BFE v1.8.5版本为例介绍BFE。
 
 在代码目录的顶层可以看到BFE包含如下目录或文件：
 
 ```bash
 $ ls bfe/
-ADOPTERS.md		MAINTAINERS.md		bfe_basic		bfe_modules		bfe_util
-CHANGELOG.md		Makefile		bfe_bufio		bfe_net			bfe_websocket
-CODE_OF_CONDUCT.md	NOTICE			bfe_config		bfe_proxy		conf
-CONTRIBUTING.md		README.md		bfe_debug		bfe_route		docs
-CONTRIBUTORS.md		SECURITY.md		bfe_fcgi		bfe_server		go.mod
-Dockerfile		VERSION			bfe_http		bfe_spdy		go.sum
-GOVERNANCE.md		bfe.go			bfe_http2		bfe_stream		snap
-LICENSE			bfe_balance		bfe_module		bfe_tls			staticcheck.conf
+ADOPTERS.md		CHANGELOG.md		CODE_OF_CONDUCT.md	CONTRIBUTING.md		CONTRIBUTORS.md
+AGENTS.md		Dockerfile		GOVERNANCE.md		LICENSE			MAINTAINERS.md
+Makefile		NOTICE			README-CN.md		README.md		SECURITY.md
+VERSION			bfe.go			go.mod			go.sum			revive.toml		release_local.sh
+bfe_balance		bfe_basic		bfe_bufio		bfe_config		bfe_debug
+bfe_fcgi		bfe_http		bfe_http2		bfe_module		bfe_modules
+bfe_net			bfe_proxy		bfe_route		bfe_server		bfe_spdy
+bfe_stream		bfe_tls			bfe_util		bfe_wasmplugin		bfe_websocket
+conf			docs			examples		snap			tests
 ```
 
 按逻辑关系各目录的层次结构如下：
@@ -38,7 +39,8 @@ LICENSE			bfe_balance		bfe_module		bfe_tls			staticcheck.conf
 
 ## 扩展模块
 - `bfe_module`: BFE模块框架相关代码
-- `bfe_modules`: BFE扩展模块相关代码
+- `bfe_modules`: BFE扩展模块相关代码，包含访问控制、重定向、重写、WAF、限流、AI网关及WASM插件等模块
+- `bfe_wasmplugin`: BFE WASM插件运行时及ABI适配相关代码
 
 ## 服务框架
 - `bfe_server`: BFE服务端主体部分

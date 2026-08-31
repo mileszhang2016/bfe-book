@@ -37,13 +37,22 @@
 
   一些程序未使用“内置”的日志基础库来实现切割和滚动覆盖的功能，而采用在crontab中定期运行脚本的方式来实现。这样的方式虽然也可以达到类似的效果，但是提高了运维的复杂性。时常出现由于遗忘增加crontab配置、或错误修改crontab配置导致的日志超限问题。建议尽量使用“内置”的日志基础库来实现以上功能。
 
-BFE的服务日志使用[https://github.com/baidu/go-lib](https://github.com/baidu/go-lib)下的log库来输出。log库在开源的log4go基础上进行了封装和修改，增加了“按照时间切割日志”的功能。在log4go中，实现了“异步写入”的机制，日志信息首先被提交到一个队列，然后由独立的go routine读出并输出。如果队列超限，则日志信息会被丢弃。
+BFE的服务日志使用[https://github.com/bfenetworks/go-lib](https://github.com/bfenetworks/go-lib)下的log库来输出。log库在开源的log4go基础上进行了封装和修改，增加了“按照时间切割日志”的功能。在log4go中，实现了“异步写入”的机制，日志信息首先被提交到一个队列，然后由独立的go routine读出并输出。如果队列超限，则日志信息会被丢弃。
+
+BFE启动时可通过命令行参数控制服务日志行为：
+- `-l <dir>`：指定日志输出目录，默认为 `./log`
+- `-s`：将日志同时输出到标准输出
+- `-d`：输出DEBUG级别日志（默认只输出INFO及以上级别）
+
+服务日志默认按“午夜”时间切割，并保留最近7天的日志文件。这些行为在 `bfe.go` 中通过 `log4go` 的相关接口设置，例如异步队列长度、非阻塞写入、带进程ID的日志格式等。
 
 ## BFE的访问日志
 
-BFE的访问日志由BFE的扩展模块mod_access来输出。BFE的访问日志中包括“请求”（Request）和“会话”（Session）两类日志。会话对应于客户端和BFE间建立的TCP连接，一个会话中可能包含多个请求。
+BFE的访问日志由BFE的扩展模块来输出，主要包括以下两种实现：
 
-mod_access提供了模板配置能力，用户可以对请求日志和会话日志中输出的数据字段做定制。
+- **mod_access**：以文本格式记录请求日志和会话日志。BFE的访问日志中包括“请求”（Request）和“会话”（Session）两类日志。会话对应于客户端和BFE间建立的TCP连接，一个会话中可能包含多个请求。mod_access提供了模板配置能力，用户可以对请求日志和会话日志中输出的数据字段做定制，字段涵盖请求标识、产品线、Host、URL、后端信息、各阶段延迟、响应状态码、会话TLS信息等内容。
+
+- **mod_access_pb3**：以 [Protocol Buffers v3](https://developers.google.com/protocol-buffers) 二进制格式记录访问日志。该模块输出的日志体积更小、解析效率更高，适合需要高性能采集和下游分析的平台。日志格式定义参见 [bfe-access-pb](https://github.com/bfenetworks/bfe-access-pb)。
 
 
 ## links

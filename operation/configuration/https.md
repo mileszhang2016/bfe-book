@@ -18,11 +18,33 @@ HTTPS配置包括加密套件、证书文件的配置、TLS协议相关参数的
 HttpsPort = 8443
 ```
 
-### 配置加密套件
-bfe.conf中包含了如下的加密套件，用户可以根据需要进行修改。这部分定义了TLS握手中支持的加密套件。
+### 配置HTTPS基础参数
+在bfe.conf的`[HttpsBasic]`段中，除加密套件外，还可以配置TLS版本、曲线偏好、SSLv2 ClientHello兼容开关以及客户端CA/CRL目录等基础参数。
 
 ```ini
+[HttpsBasic]
+# 支持的曲线偏好
+CurvePreferences=CurveP256
+
+# 支持的最小/最大TLS版本
+MinTlsVersion = VersionSSL30
+MaxTlsVersion = VersionTLS12
+
+# 是否支持SSLv2 ClientHello（兼容旧客户端）
+EnableSslv2ClientHello = true
+
+# 客户端CA证书及CRL目录
+ClientCABaseDir = tls_conf/client_ca
+ClientCRLBaseDir = tls_conf/client_crl
+```
+
+### 配置加密套件
+bfe.conf中`[HttpsBasic]`段的`CipherSuites`定义了TLS握手中支持的加密套件，用户可以根据需要进行修改。
+
+```ini
+[HttpsBasic]
 CipherSuites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256|TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+CipherSuites=TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256|TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
 CipherSuites=TLS_ECDHE_RSA_WITH_RC4_128_SHA
 CipherSuites=TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
 CipherSuites=TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
@@ -48,7 +70,8 @@ ServerCertConf = tls_conf/server_cert_conf.data
         "CertConf": {
             "example.org.cert": {
                 "ServerCertFile": "tls_conf/certs/server.crt",
-                "ServerKeyFile" : "tls_conf/certs/server.key"
+                "ServerKeyFile" : "tls_conf/certs/server.key",
+                "OcspResponseFile": "tls_conf/certs/server.ocsp"
             }
         }
     }
@@ -56,7 +79,7 @@ ServerCertConf = tls_conf/server_cert_conf.data
 ```
 
 该文件包含了服务端证书的信息，其中"Default"字段指示了服务端的缺省证书。"CertConf"中包含了证书文件的具体内容。上面的例子中，配置了一个名为"example.org.cert"的证书。
-"CertConf"中可以包含多个证书，分别用不同的名字进行标识。每个证书的定义都包含"ServerCertFile"和"ServerKeyFile"两个字段，分别指示服务端证书文件和对应的私钥文件。
+"CertConf"中可以包含多个证书，分别用不同的名字进行标识。每个证书的定义包含"ServerCertFile"和"ServerKeyFile"两个字段，分别指示服务端证书文件和对应的私钥文件；还可以选配"OcspResponseFile"字段，用于开启OCSP Stapling，指定证书对应的OCSP响应文件路径。
 
 证书名字，比如上例中的"example.org.cert"，将在后续的tls_rule_conf.data配置中被使用。
 
@@ -75,20 +98,26 @@ TlsRuleConf = tls_conf/tls_rule_conf.data
 {
     "Version": "1",
     "DefaultNextProtos": ["http/1.1"],
+    "DefaultChacha20": false,
+    "DefaultDynamicRecord": false,
     "Config": {
         "example_product": {
+            "VipConf": ["10.199.4.14"],
             "SniConf": ["example.org"],
             "CertName": "example.org.cert",
             "NextProtos": [
+                "h2",
                 "http/1.1"
             ],
-            "Grade": "C"
+            "Grade": "C",
+            "Chacha20": false,
+            "DynamicRecord": false
         }
     }
 }
 ```
 
-其中"SniConf"指示了使用SNI的域名。"NextProtos"标识了ALPN协商中使用的协议。安全等级"Grade"定义了TLS协商中服务端可以使用的加密套件的等级，具体描述见后续章节。
+其中"VipConf"指示了使用VIP地址匹配的TLS规则；"SniConf"指示了使用SNI的域名。"CertName"指定了使用的证书名称。"NextProtos"标识了ALPN协商中使用的协议，支持`h2`、`spdy/3.1`、`http/1.1`、`stream`，并支持参数化语法（如`h2;level=0;mcs=200;isw=65535;rate=100;pp=1`）。安全等级"Grade"定义了TLS协商中服务端可以使用的加密套件的等级，具体描述见后续章节。"Chacha20"用于控制是否优先使用ChaCha20加密套件，"DynamicRecord"用于控制是否开启动态TLS记录大小；两者未配置时分别继承顶层的"DefaultChacha20"和"DefaultDynamicRecord"。
 
 上述配置后，重启BFE让配置生效。就可以通过HTTPS访问配置的HTTPS端口。
 
@@ -127,8 +156,7 @@ SessionExpire = 3600
 
 ```
 
-上述配置中的"Servers"字段，指明了连接的redis服务器名字。该名字的具体地址，在
-conf/server_data_conf/name_conf.data中指定：
+上述配置中的"Servers"字段，指明了连接的redis服务器名字。该名字需要在bfe.conf的`[Server]`段中通过`NameConf`指定名字服务配置文件（如`NameConf = server_data_conf/name_conf.data`），并在该配置文件（如conf/server_data_conf/name_conf.data）中指定具体地址：
 
 ```json
 {
@@ -156,7 +184,7 @@ SessionTicketsDisabled = false
 # session ticket key
 SessionTicketKeyFile = tls_conf/session_ticket_key.data
 ```
-在SessionTicketKeyFile指向的文件中，用户可以配置加密ticket的密钥，格式为包含字符a-z/0-9，长度为48的字符串。
+在SessionTicketKeyFile指向的文件中，用户可以配置加密ticket的密钥，格式为96字符的十六进制字符串（表示48字节原始密钥），字符仅包含0-9、a-f；也支持直接存放48字节原始密钥的二进制文件（当JSON解析失败时作为回退）。
 
 开启上述配置后，如client支持session ticket，TLS握手中就可实现基于session ticket的会话重用。
 
@@ -182,6 +210,8 @@ ClientCRLBaseDir = tls_conf/client_crl
 # ls conf/tls_conf/client_ca
 example_ca.crt
 ```
+
+如需配置CRL，需在ClientCRLBaseDir下建立以CA名称命名的子目录，并将`.crl`文件放入该子目录，例如`conf/tls_conf/client_crl/example_ca/example_ca.crl`。
 
 修改conf/tls_conf/tls_rule_conf.data中租户"example_product"的配置，将
 "ClientAuth"设置为true，"ClientCAName"为上述证书文件的名字，本例中为"example_ca"。
@@ -227,29 +257,30 @@ BFE支持多种安全等级（A+/A/B/C）。各安全等级差异在于支持的
 
 | 支持协议 | 支持加密套件 |
 | -------- | ------------ |
-| TLS1.2  | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_OLD_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
+| TLS1.2  | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
 
 
 * 安全等级A
 
 | 支持协议 | 支持加密套件 |
 | -------- | ------------ |
-| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_OLD_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
+| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
 
 * 安全等级B
 
 | 支持协议 | 支持加密套件 |
 | -------- | ------------ |
-| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_OLD_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
-| SSLv3 | TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
+| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
+| SSLv3 | TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_ECDHE_ECDSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
 
+**注：** SSLv3 下的 ECDSA RC4 套件仅在 `onlyRC4` 模式下生效。
 
 * 安全等级C
 
 | 支持协议 | 支持加密套件 |
 | -------- | ------------ |
-| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_OLD_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
-| SSLv3 | TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
+| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_ECDHE_ECDSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
+| SSLv3 | TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_ECDHE_ECDSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
 
 
 

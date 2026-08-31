@@ -22,7 +22,7 @@ The configuration files are all located in [/conf](https://github.com/bfenetwork
 
 + Configuration files for BFE extension module
 
-  For the convenience of management, the configuration files for BFE extension modules and BFE main logic are stored separately. For each extension module, there is an independent directory for configuration files, which is located in the "/conf/mod_<name>/" directory. For example: The configuration files of mod_block are located in /conf/mod_block/ directory.
+  For the convenience of management, the configuration files for BFE extension modules and BFE main logic are stored separately. For each extension module, there is an independent directory for configuration files, which is located in the "/conf/mod_<name>/" directory. For example: The configuration files of mod_block are located in /conf/mod_block/ directory, the configuration files of mod_wasmplugin are located in /conf/mod_wasm/ directory, and the configuration files of AI gateway related modules (mod_ai_route, mod_ai_token_auth, mod_ai_rate_limit, mod_body_process) are located in /conf/mod_ai_route/, /conf/mod_ai_token_auth/, /conf/mod_ai_rate_limit/, /conf/mod_body_process/ directories respectively.
 
 
 ## Normal Configuration vs Dynamic Configuration
@@ -51,7 +51,7 @@ As described in "[Status Monitoring](../monitor/monitor. md)", a Web server is e
 
 For example, by accessing http://127.0.0.1:8421/reload/gslb_data_conf You can trigger the reload of gslb.data.
 
-For security reasons, access to this interface can only be allowed when it is initiated from the same server where the BFE program is deployed. This restriction is located in the [implementation of Web Monitor](https://github.com/baidu/go-lib/blob/master/web-monitor/web_monitor/web_monitor.go ):
+For security reasons, access to this interface can only be allowed when it is initiated from the same server where the BFE program is deployed. This restriction is located in the [implementation of Web Monitor](https://github.com/bfenetworks/go-lib/blob/master/web-monitor/web_monitor/web_monitor.go):
 
 ```
 // source ip address allowed to do reload

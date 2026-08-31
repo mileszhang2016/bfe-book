@@ -50,8 +50,16 @@ For dynamic configurations, it is required to register callback function on dedi
 For example, in the init function of mod_block, there is some logic as follows, used to register callback function for configuration reload(see [mod_block.go](https://github.com/bfenetworks/bfe/tree/master/bfe_modules/mod_block/mod_block.go) for details).
 
 ```golang
+func (m *ModuleBlock) reloadHandlers() map[string]interface{} {
+    handlers := map[string]interface{}{
+        m.name + ".global_ip_table":    m.loadGlobalIPTable,
+        m.name + ".product_rule_table": m.loadProductRuleConf,
+    }
+    return handlers
+}
+
     // register web handler for reload
-    err = whs.RegisterHandler(web_monitor.WebHandleReload, m.name, m.loadConfData)
+    err = web_monitor.RegisterHandlers(whs, web_monitor.WebHandleReload, m.reloadHandlers())
     if err != nil {
       ...
     }
@@ -101,6 +109,20 @@ func (m *ModuleBlock) Init(cbs *bfe_module.BfeCallbacks, whs *web_monitor.WebHan
 }
 ```
 
+## Register the Module
+
+To have BFE load the newly developed module, register it in the module list of [/bfe_modules/bfe_modules.go](https://github.com/bfenetworks/bfe/tree/master/bfe_modules/bfe_modules.go).
+
+```golang
+var moduleList = []bfe_module.BfeModule{
+    ...
+    mod_block.NewModuleBlock(),
+    ...
+}
+```
+
+The order of modules in `moduleList` is very important and affects when each module executes. If the new module depends on, or is depended on by, other modules, document the ordering requirement in a comment and place the module in the correct position. Refer to the existing comments in `bfe_modules.go` for specific ordering constraints.
+
 ## Expose Module Internal States
 
 For each BFE module, it is strongly recommended to expose enough internal states.
@@ -123,7 +145,6 @@ type ModuleBlockState struct {
     ConnAccept   *metrics.Counter // connection passed
     ConnRefuse   *metrics.Counter // connection refused
     ReqTotal     *metrics.Counter // all request in
-    ReqToCheck   *metrics.Counter // request to check
     ReqAccept    *metrics.Counter // request accepted
     ReqRefuse    *metrics.Counter // request refused
     WrongCommand *metrics.Counter // request with condition satisfied, but wrong command

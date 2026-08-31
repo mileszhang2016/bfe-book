@@ -5,7 +5,7 @@ BFE defines a set of module mechanisms to quickly develop new functions by writi
 | Code Directory | Description                                                  |
 | -------------- | ------------------------------------------------------------ |
 | bfe_module     | It includes the definition of module basic types, such as module interface, module callback type, callback chain type, callback framework type. |
-| bfe_moudles    | It includes the implementation of built-in modules, such as various modules of traffic management, anti attack, traffic visibility, etc. |
+| bfe_modules    | It includes the implementation of built-in modules, such as various modules of traffic management, anti attack, traffic visibility, AI gateway, WASM plugin, etc. |
 | bfe_server     | It realizes the management of the life cycle of connection/request processing, and sets the callback point in the key processing stage. The module callback function chain registered at these callback points will be executed in order to support the customized processing of connections/requests. |
 
 ## Module Basic Types
@@ -199,7 +199,7 @@ if hl != nil {
         // Close the connection after response
         action = closeAfterReply
         basicReq.BfeStatusCode = bfe_http.StatusInternalServerError
-        return
+        goto send_response
 
     case bfe_module.BfeHandlerRedirect:
         // Make an redirect
@@ -214,6 +214,49 @@ if hl != nil {
     }
 }
 ```
+
+
+## Module Registration and Management
+
+BFE uses functions in `bfe_module` and `bfe_modules` to register, enable, initialize, and query module status.
+
+```go
+// bfe_module/bfe_module.go
+
+// AddModule adds a module to the global available module table.
+func AddModule(module BfeModule)
+
+// NewBfeModules creates a BfeModules instance.
+func NewBfeModules() *BfeModules
+
+// RegisterModule registers a module as a work module (only modules configured in bfe.conf are initialized).
+func (bm *BfeModules) RegisterModule(name string) error
+
+// Init initializes all registered work modules in the order of modulesAll.
+func (bm *BfeModules) Init(cbs *BfeCallbacks, whs *web_monitor.WebHandlers, cr string) error
+
+// ModuleStatusGetJSON returns the lists of available and enabled modules.
+func ModuleStatusGetJSON() ([]byte, error)
+```
+
+```go
+// bfe_modules/bfe_modules.go
+
+// SetModules registers all modules in moduleList into the global module table via AddModule.
+func SetModules()
+
+// InitModuleList replaces the default moduleList (e.g., for testing).
+func InitModuleList(modules []bfe_module.BfeModule)
+```
+
+During BFE startup, the module-related calls are performed in the following order:
+
+1. `bfe_modules.SetModules()`: registers all built-in modules into the global module table.
+2. `bfeServer.RegisterModules(cfg.Server.Modules)`: registers the modules configured in `bfe.conf` as work modules.
+3. `bfeServer.InitModules()`: initializes work modules in `modulesAll` order and adds them to the enabled module list.
+4. The monitoring endpoint `module_status` invokes `ModuleStatusGetJSON()` to return the currently available and enabled modules.
+
+The initialization order of built-in modules is defined by `moduleList` in `bfe_modules/bfe_modules.go`, and the order is important for correct functionality. When adding a custom module, it must be added to `moduleList` with attention to its execution order relative to other modules.
 
 
 ## links

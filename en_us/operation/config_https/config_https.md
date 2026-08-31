@@ -18,11 +18,33 @@ HTTPS ports can be configured in bfe.conf.
 HttpsPort = 8443
 ```
 
-### Cipher Suite
-The following cipher suite is included in bfe.conf. Users can modify it as needed. This section defines the cipher suite supported by TLS.
+### HTTPS Basic Parameters
+In the `[HttpsBasic]` section of bfe.conf, you can configure basic TLS parameters such as TLS versions, curve preferences, SSLv2 ClientHello compatibility, and client CA/CRL directories, in addition to cipher suites.
 
 ```ini
+[HttpsBasic]
+# supported curve preference
+CurvePreferences=CurveP256
+
+# supported min/max TLS versions
+MinTlsVersion = VersionSSL30
+MaxTlsVersion = VersionTLS12
+
+# whether to support SSLv2 ClientHello (for compatibility with legacy clients)
+EnableSslv2ClientHello = true
+
+# client CA certificate and CRL directories
+ClientCABaseDir = tls_conf/client_ca
+ClientCRLBaseDir = tls_conf/client_crl
+```
+
+### Cipher Suite
+The `CipherSuites` field in the `[HttpsBasic]` section of bfe.conf defines the cipher suites supported by TLS. Users can modify it as needed.
+
+```ini
+[HttpsBasic]
 CipherSuites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256|TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+CipherSuites=TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256|TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
 CipherSuites=TLS_ECDHE_RSA_WITH_RC4_128_SHA
 CipherSuites=TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
 CipherSuites=TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
@@ -48,7 +70,8 @@ Open the server certificate configuration file tls_conf/server_cert_conf.data, y
         "CertConf": {
             "example.org.cert": {
                 "ServerCertFile": "tls_conf/certs/server.crt",
-                "ServerKeyFile" : "tls_conf/certs/server.key"
+                "ServerKeyFile" : "tls_conf/certs/server.key",
+                "OcspResponseFile": "tls_conf/certs/server.ocsp"
             }
         }
     }
@@ -57,7 +80,7 @@ Open the server certificate configuration file tls_conf/server_cert_conf.data, y
 
 This file contains the information of the server certificate, where the "Default" field indicates the default certificate of the server. "CertConf" contains the specific information of the certificate file. In the above example, a certificate named "example.org.cert" is configured.
 
-"CertConf" can contain multiple certificates, which are identified by different names. The definition of each certificate contains two fields, "ServerCertFile" and "ServerKeyFile", indicating the server certificate file and the corresponding private key file respectively.
+"CertConf" can contain multiple certificates, which are identified by different names. The definition of each certificate contains two fields, "ServerCertFile" and "ServerKeyFile", indicating the server certificate file and the corresponding private key file respectively. It can also optionally include the "OcspResponseFile" field to enable OCSP Stapling by specifying the path to the certificate's OCSP response file.
 
 The certificate name, such as "example.org.cert" in the above example, will be used in the following configuration in tls_rule_conf.data.
 
@@ -77,20 +100,26 @@ The following example is the rule we prepared for the tenant "example_product".
 {
     "Version": "1",
     "DefaultNextProtos": ["http/1.1"],
+    "DefaultChacha20": false,
+    "DefaultDynamicRecord": false,
     "Config": {
         "example_product": {
+            "VipConf": ["10.199.4.14"],
             "SniConf": ["example.org"],
             "CertName": "example.org.cert",
             "NextProtos": [
+                "h2",
                 "http/1.1"
             ],
-            "Grade": "C"
+            "Grade": "C",
+            "Chacha20": false,
+            "DynamicRecord": false
         }
     }
 }
 ```
 
-"SniConf" indicates the domain name using SNI. "NextProtos" identifies the protocol used in ALPN negotiation. The security grade "Grade" defines the cipher suite that can be used by the server in TLS negotiation. See the following chapters for details.
+"VipConf" indicates the TLS rule matched by VIP address; "SniConf" indicates the domain name using SNI. "CertName" specifies the certificate to use. "NextProtos" identifies the protocol used in ALPN negotiation, supporting `h2`, `spdy/3.1`, `http/1.1`, `stream`, and parameterized syntax such as `h2;level=0;mcs=200;isw=65535;rate=100;pp=1`. The security grade "Grade" defines the cipher suite that can be used by the server in TLS negotiation. See the following chapters for details. "Chacha20" controls whether to prefer ChaCha20 cipher suites, and "DynamicRecord" controls whether to enable dynamic TLS record size; when not configured, they inherit the top-level "DefaultChacha20" and "DefaultDynamicRecord" respectively.
 
 After the above configuration is ready, restart BFE to make the configuration take effect. You can access the configured HTTPS port through HTTPS.
 
@@ -129,9 +158,7 @@ SessionExpire = 3600
 
 ```
 
-The "Servers" field in the above configuration indicates the name of the Redis server. The specific address is specified in
-
-conf/server_data_conf/name_conf.data :
+The "Servers" field in the above configuration indicates the name of the Redis server. This name must be resolved through the name service configuration file specified by `NameConf` in the `[Server]` section of bfe.conf (e.g., `NameConf = server_data_conf/name_conf.data`), and the specific address is specified in that configuration file (e.g., conf/server_data_conf/name_conf.data):
 
 ```json
 {
@@ -159,7 +186,7 @@ SessionTicketsDisabled = false
 # session ticket key
 SessionTicketKeyFile = tls_conf/session_ticket_key.data
 ```
-In the file pointed to by SessionTicketKeyFile, users can configure the key for encrypting the ticket. The format is a string containing the characters a-z/0-9 and the length is 48.
+In the file pointed to by SessionTicketKeyFile, users can configure the key for encrypting the ticket. The format is a 96-character hexadecimal string representing 48 raw bytes, with characters limited to 0-9 and a-f. A raw 48-byte binary file is also supported as a fallback when JSON parsing fails.
 
 After the above configuration is enabled, if the client supports session ticket, session reuse based on session ticket can be realized in TLS handshake.
 
@@ -186,6 +213,8 @@ Place the client's CA certificate in conf/tls_conf/client_ca, and the certificat
 # ls conf/tls_conf/client_ca
 example_ca.crt
 ```
+
+To configure CRLs, create a subdirectory named after the CA under ClientCRLBaseDir and place the `.crl` files in that subdirectory, for example `conf/tls_conf/client_crl/example_ca/example_ca.crl`.
 
 Modify  the configuration of tenant "example_product" in conf/tls_conf/tls_rule_conf.data, "ClientAuth" is set to true, "ClientCAName" is the name of the above certificate file, in this case "example_ca".
 
@@ -230,30 +259,31 @@ BFE supports multiple security grades (A+/A/B/C). The difference of each securit
 * Grade A+
 
 | Supported Protocols | Supported Cipher Suites |
-| -------- | ------------ |
-| TLS1.2  | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_OLD_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
+| ------------------- | ----------------------- |
+| TLS1.2 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
 
 
 * Grade A
 
 | Supported Protocols | Supported Cipher Suites |
-| -------- | ------------ |
-| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_OLD_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
+| ------------------- | ----------------------- |
+| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
 
 * Grade B
 
 | Supported Protocols | Supported Cipher Suites |
-| -------- | ------------ |
-| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_OLD_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
-| SSLv3 | TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
+| ------------------- | ----------------------- |
+| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA |
+| SSLv3 | TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_ECDHE_ECDSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
 
+**Note:** The ECDSA RC4 suite under SSLv3 is available only in `onlyRC4` mode.
 
 * Grade C
 
 | Supported Protocols | Supported Cipher Suites |
-| -------- | ------------ |
-| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_OLD_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
-| SSLv3 | TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
+| ------------------- | ----------------------- |
+| TLS1.2<br>TLS1.1<br>TLS1.0 | TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256<br>TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA<br>TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA<br>TLS_RSA_WITH_AES_128_CBC_SHA<br>TLS_RSA_WITH_AES_256_CBC_SHA<br>TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_ECDHE_ECDSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
+| SSLv3 | TLS_ECDHE_RSA_WITH_RC4_128_SHA<br>TLS_ECDHE_ECDSA_WITH_RC4_128_SHA<br>TLS_RSA_WITH_RC4_128_SHA |
 
 
 

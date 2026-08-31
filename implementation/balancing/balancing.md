@@ -16,7 +16,13 @@
 
 ## 全局负载均衡
 
-BFE在后端集群的多个子集群之间，采用基于WRR算法的负载均衡策略。 算法实现详见均衡模块 bfe_balance/bal_gslb/bal_gslb.go:subClusterBalance()。
+BFE在后端集群的多个子集群之间，支持配置多种负载均衡策略（由 `GslbBasicConf.BalanceMode` 指定，默认为 WRR）：
+
+- WRR：加权轮询
+- WLC：加权最小连接数
+- EPP：外部处理策略（External Processing Policy），通过 gRPC 调用外部 Envoy ext_proc 服务决定目标后端；当外部服务无决策或失败时，回退到本地 WRR/WLC 策略
+
+算法实现详见均衡模块 `bfe_balance/bal_gslb/bal_gslb.go` 中的 `subClusterBalance()` / `Balance()` / `BalanceEpp()`。
 
 全局负载均衡算法包括如下两个执行步骤：
 
@@ -26,11 +32,12 @@ BFE在后端集群的多个子集群之间，采用基于WRR算法的负载均�
 1. 来自某个用户的请求，常态固定转发给某个子集群处理，以便于用户分组管理
 2. 包含某个查询的请求，常态固定转发给某个子集群处理，以满足缓存友好性
 
-为实现感知请求内容的负载均衡，BFE支持以下三种方式标识请求：
+为实现感知请求内容的负载均衡，BFE支持以下四种方式标识请求：
 1. 基于请求指定Header或Cookie
 
 2. 基于请求来源IP
 3. 优先基于请求指定Header或Cookie，缺失情况下基于请求IP
+4. 基于请求URI（RequestURI）
 
 ```go
 // bfe_balance/bal_gslb/bal_gslb.go 
@@ -47,6 +54,9 @@ switch *bal.hashConf.HashStrategy {
 		  	if hashKey == nil {
 		  			hashKey = clientIP
 		  	}
+
+	  case cluster_conf.RequestURI:
+		  	hashKey = []byte(req.HttpRequest.RequestURI)
 }
 
 // if hashKey is empty, use random value
@@ -60,7 +70,7 @@ return hashKey
 
 
 
-算法将用户的请求切分为100个桶，并基于指定策略(例如基于请求Cookie中的用户ID)，将特定请求固定哈希到其中某个桶
+算法将哈希空间切分为 `totalWeight` 个桶（默认各子集群权重和为 100 时即为 100 个桶），并基于指定策略（例如基于请求 Cookie 中的用户 ID），将特定请求固定哈希到其中某个桶
 
 ```go
 // bfe_balance/bal_slb/bal_rr.go 
@@ -80,7 +90,7 @@ func GetHash(value []byte, base uint) int {
 
 
 ### 步骤二、请求桶分配及均衡
-算法将100个桶，分配给权重和为100的所有子集群。
+算法将 `totalWeight` 个桶，按权重分配给所有子集群（默认权重和为 100）。
 
 ![gslb](gslb.png)
 
@@ -109,6 +119,18 @@ for i := 0; i < len(bal.subClusters); i++ {
 // Never come here
 return nil, err.News("subcluster balancing failure") 
 ```
+
+另外，GSLB 支持一个特殊的子集群 `GSLB_BLACKHOLE`（黑洞）。当请求被分配到该子集群时，BFE 会直接丢弃流量并返回 `ErrGslbBlackhole`，常用于集群整体过载保护。
+
+需要区分子集群级哈希与实例级会话保持：
+
+- 上文所述的 `HashStrategy` 作用于子集群之间，决定请求进入哪个子集群。
+- `GslbBasic.HashConf.SessionSticky` 开启后，在已选定的子集群内部会使用同样的 `hashKey`，通过 `WrrSticky` 算法固定到某个后端实例，实现实例级会话保持。
+- 若需要更灵活的会话保持（如基于 Cookie/StickyID、支持 Redis 分布式缓存），可使用 `mod_session_sticky` 模块。
+
+### EPP 外部策略
+
+当 `BalanceMode` 配置为 EPP 时，BFE 优先调用外部 EPP 服务进行后端选择。该服务基于 Envoy ext_proc 协议，BFE 将请求头部（及请求体）发送给 EPP 服务，EPP 服务通过动态元数据（如 `envoy.lb` 中的 `x-gateway-destination-endpoint`）返回目标后端地址；BFE 先在本地子集群中查找该地址，若找不到则构造临时后端。若 EPP 服务未返回决策或调用失败，BFE 会回退到本地 WRR/WLC 策略继续选择后端。
 
 ## 分布式负载均衡
 

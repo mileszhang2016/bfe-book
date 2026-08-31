@@ -5,7 +5,7 @@ BFE定义了一套模块机制，通过编写模块插件来快速开发新功�
 | 代码目录    | 说明                                                         |
 | ----------- | ------------------------------------------------------------ |
 | bfe_module  | 包含了模块基础类型的定义，例如模块的接口、模块回调类型、回调链类型、回调框架类型 |
-| bfe_moudles | 包含了内置模块的实现，例如流量管理、安全防攻击、流量可见性等类别的各种模块 |
+| bfe_modules | 包含了内置模块的实现，例如流量管理、安全防攻击、流量可见性、AI网关、WASM插件等类别的各种模块 |
 | bfe_server  | 实现了连接/请求处理的生命周期的管理，并在关键处理阶段设置了回调点。注册在这些回调点的模块回调函数链，将被顺序执行，从而支持对连接/请求的定制化处理 |
 
 ## 模块基础类型
@@ -202,7 +202,7 @@ if hl != nil {
         // Close the connection after response
         action = closeAfterReply
         basicReq.BfeStatusCode = bfe_http.StatusInternalServerError
-        return
+        goto send_response
 
     case bfe_module.BfeHandlerRedirect:
         // Make an redirect
@@ -218,6 +218,49 @@ if hl != nil {
 }
 ```
 
+
+
+## 模块的注册与管理
+
+BFE通过`bfe_module`和`bfe_modules`中的相关函数，完成模块的登记、启用初始化和状态查询。
+
+```go
+// bfe_module/bfe_module.go
+
+// AddModule 将模块加入全局可用模块表
+func AddModule(module BfeModule)
+
+// NewBfeModules 创建BfeModules实例
+func NewBfeModules() *BfeModules
+
+// RegisterModule 注册为工作模块（仅在bfe.conf中配置的模块才会被初始化）
+func (bm *BfeModules) RegisterModule(name string) error
+
+// Init 按modulesAll顺序初始化所有已注册的工作模块
+func (bm *BfeModules) Init(cbs *BfeCallbacks, whs *web_monitor.WebHandlers, cr string) error
+
+// ModuleStatusGetJSON 获取可用模块和已启用模块列表
+func ModuleStatusGetJSON() ([]byte, error)
+```
+
+```go
+// bfe_modules/bfe_modules.go
+
+// SetModules 将moduleList中所有模块通过AddModule登记到全局模块表
+func SetModules()
+
+// InitModuleList 用于替换默认的moduleList（如测试场景）
+func InitModuleList(modules []bfe_module.BfeModule)
+```
+
+在BFE启动流程中，模块相关调用顺序如下：
+
+1. `bfe_modules.SetModules()`：将所有内置模块登记到全局模块表。
+2. `bfeServer.RegisterModules(cfg.Server.Modules)`：根据`bfe.conf`中配置的模块列表，注册为工作模块。
+3. `bfeServer.InitModules()`：按`modulesAll`顺序初始化工作模块，并将其加入已启用模块列表。
+4. 通过监控接口`module_status`可调用`ModuleStatusGetJSON()`，返回当前可用模块和已启用模块。
+
+内置模块的初始化顺序在`bfe_modules/bfe_modules.go`的`moduleList`中定义，顺序对模块功能有重要影响。新增自定义模块时，需将其加入`moduleList`并注意与其他模块的执行顺序。
 
 
 ## links

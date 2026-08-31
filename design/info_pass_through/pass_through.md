@@ -56,11 +56,17 @@ BFE在扩展模块mod_header中默认提供了捎带客户端IP地址和端口�
 | REQ_HEADER_SET | 设置请求头 | HeaderName, HeaderValue |
 | REQ_HEADER_ADD | 添加请求头 | HeaderName, HeaderValue |
 | REQ_HEADER_DEL | 删除请求头 | HeaderName              |
-| REQ_HEADER_RENAME | 重命名请求头 | HeaderName, HeaderName2 |
+| REQ_HEADER_RENAME | 重命名请求头 | OriginalHeaderName, NewHeaderName |
 | RSP_HEADER_SET | 设置响应头 | HeaderName, HeaderValue |
 | RSP_HEADER_ADD | 添加响应头 | HeaderName, HeaderValue |
 | RSP_HEADER_DEL | 删除响应头 | HeaderName              |
-| REQ_HEADER_RENAME | 重命名响应头 | HeaderName, HeaderName2 |
+| RSP_HEADER_RENAME | 重命名响应头 | OriginalHeaderName, NewHeaderName |
+| REQ_HEADER_MOD | 修改请求头 | scheme_set/query_add, HeaderName, ... |
+| RSP_HEADER_MOD | 修改响应头 | scheme_set/query_add, HeaderName, ... |
+| REQ_COOKIE_SET | 设置请求Cookie | CookieName, CookieValue |
+| REQ_COOKIE_DEL | 删除请求Cookie | CookieName |
+| RSP_COOKIE_SET | 设置响应Cookie | Name, Value, Domain, Path, Expires(RFC1123), MaxAge(int), HttpOnly(bool), Secure(bool) |
+| RSP_COOKIE_DEL | 删除响应Cookie | Name, Domain, Path |
 
 ### 例子
 
@@ -119,6 +125,8 @@ BFE在扩展模块mod_header中默认提供了捎带客户端IP地址和端口�
 | %bfe_session_id                          | 会话ID                                |                   |
 | %bfe_log_id                              | 请求ID                                | 需要启用mod_logid |
 | %bfe_cip                                 | 客户端IP (CIP)                        |                   |
+| %bfe_bip                                 | 后端实例IP                            |                   |
+| %bfe_rip                                 | BFE实例IP                             |                   |
 | %bfe_vip                                 | 服务端IP (VIP)                        |                   |
 | %bfe_server_name                         | BFE实例地址                           |                   |
 | %bfe_cluster                             | 目的后端集群                          |                   |
@@ -128,7 +136,13 @@ BFE在扩展模块mod_header中默认提供了捎带客户端IP地址和端口�
 | %bfe_ssl_version                         | TLS/SSL协议版本                       |                   |
 | %bfe_ssl_ja3_raw                         | TLS/SSL客户端JA3算法指纹数据          |                   |
 | %bfe_ssl_ja3_hash                        | TLS/SSL客户端JA3算法指纹哈希值        |                   |
+| %bfe_http2_fingerprint                   | HTTP/2指纹                            |                   |
 | %bfe_protocol                            | 访问协议                              |                   |
+| %bfe_client_geo_country_iso_code         | 客户端地理国家ISO代码                 | 需要启用mod_geo   |
+| %bfe_client_geo_subdivision_iso_code     | 客户端地理行政区划ISO代码             | 需要启用mod_geo   |
+| %bfe_client_geo_city_name                | 客户端地理城市名                      | 需要启用mod_geo   |
+| %bfe_client_geo_latitude                 | 客户端地理纬度                        | 需要启用mod_geo   |
+| %bfe_client_geo_longitude                | 客户端地理经度                        | 需要启用mod_geo   |
 | %client_cert_serial_number               | 客户端证书序列号                      |                   |
 | %client_cert_subject_title               | 客户端证书Subject title               |                   |
 | %client_cert_subject_common_name         | 客户端证书Subject Common Name         |                   |

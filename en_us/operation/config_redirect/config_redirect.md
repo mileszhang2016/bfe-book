@@ -15,13 +15,17 @@ $ ls
 mod_redirect.conf	redirect.data
 ```
 
-mod_redirect.conf is the basic configuration file of the module, pointing to the redirect rule file. mod_redirect.conf usually does not need to be modified.
+mod_redirect.conf is the basic configuration file of the module, pointing to the redirect rule file.
 
 ```
 $ cat mod_redirect.conf 
 [basic]
 DataPath = mod_redirect/redirect.data
+
+[Log]
+OpenDebug = false
 ```
+`Log.OpenDebug` controls whether debug logs are output (disabled by default) and usually does not need to be modified.
 
 redirect.data contains redirect rules and can be loaded dynamically. The sample configuration file in the installation package is as follows:
 
@@ -45,6 +49,10 @@ redirect.data contains redirect rules and can be loaded dynamically. The sample 
 }
 ```
 The above configuration adds a rule to product *example_product*: for requests that meet the condition identified by "Cond" (the prefix of the request path is "/redirect"), execute the action identified by "Actions" (redirect to https://example.org）, the returned HTTP response code is 301.
+
+Notes:
+- Each rule currently supports only one action in "Actions".
+- "Status" is the HTTP redirect status code returned to the client; commonly used values are 301, 302, 303, 307, 308, or other valid HTTP redirect status codes.
 
 ## Actions
 "Cmd" in "Actions" indicates how to set the URL in redirect.
@@ -84,7 +92,7 @@ Result:
 |Redirect to   | http://news.example.com |
 
 ### URL_PREFIX_ADD
-Set the redirect URL by adding a specific prefix to the current URL. Parameter is the prefix to be added.
+Set the redirect URL by concatenating a specific prefix with the original URI (path + query). Parameter is the prefix to be added.
 
 Example:
 ```json    

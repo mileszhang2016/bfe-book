@@ -38,13 +38,22 @@ For normal programs, the output of the log should meet the following requirement
 
   Some programs do not use the "built-in" log library to realize the functions of cutting and rolling overwriting, but use the way of running scripts periodically by crontab. Although this method can achieve similar results, it increases the complexity of operation and maintenance. Log overloaded problems often occur due to forgetting to add the crontab configuration or incorrectly modifying the crontab configuration. It is recommended to use the "built-in" log library as much as possible.
 
-BFE uses log library in [https://github.com/baidu/go-lib](https://github.com/baidu/go-lib) to output server log. The log library is encapsulated and modified on the basis of the open source log4go, adding the function of "cutting logs according to time". In log4go, the "asynchronous write" mechanism is implemented. Log information is first submitted to a queue, and then read and output by an independent go routine. If the queue exceeds the limit, the log information will be discarded.
+BFE uses log library in [https://github.com/bfenetworks/go-lib](https://github.com/bfenetworks/go-lib) to output server log. The log library is encapsulated and modified on the basis of the open source log4go, adding the function of "cutting logs according to time". In log4go, the "asynchronous write" mechanism is implemented. Log information is first submitted to a queue, and then read and output by an independent go routine. If the queue exceeds the limit, the log information will be discarded.
+
+BFE provides command-line flags to control server log behavior:
+- `-l <dir>`: specifies the log output directory, default is `./log`
+- `-s`: outputs logs to stdout as well
+- `-d`: outputs DEBUG level logs (default is INFO and above)
+
+Server logs are rotated at midnight by default and the most recent 7 days of log files are retained. These behaviors are configured in `bfe.go` through log4go interfaces, including async queue length, non-blocking writes, and log format with process ID.
 
 ## Access Log of BFE
 
-Access log of BFE is outputed by extension module mod_access. BFE's access logs include "Request" and "Session" logs. The session corresponds to the TCP connection established between the client and BFE. A session may contain multiple requests.
+BFE's access logs are output by extension modules, mainly including the following two implementations:
 
-mod_access provides template configuration capabilities, and users can customize the data fields output in the request log and session log.
+- **mod_access**: writes request logs and session logs in text format. BFE's access logs include "Request" and "Session" logs. The session corresponds to the TCP connection established between the client and BFE. A session may contain multiple requests. mod_access provides template configuration capabilities, and users can customize the data fields output in the request log and session log, covering fields such as log ID, product, Host, URL, backend information, latency at each stage, response status code, and session TLS information.
+
+- **mod_access_pb3**: records access logs in [Protocol Buffers v3](https://developers.google.com/protocol-buffers) binary format. Logs produced by this module are smaller in size and more efficient to parse, making it suitable for high-performance collection and downstream analysis platforms. The log format definition is in [bfe-access-pb](https://github.com/bfenetworks/bfe-access-pb).
 
 ## links
 Previous: [Chap13 Status Monitoring](../../../en_us/design/monitor/monitor.md)  

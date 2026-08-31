@@ -23,7 +23,7 @@ In the subsequent configuration, the three instances will be defined in the same
 
 ## Modify *bfe.conf*
 
-*bfe.conf* contains the basic configuration of BFE. You can start with this file to understand the configuration file. This configuration file contains a large number of configuration options, and the specific meaning will be described later.
+*bfe.conf* contains the basic configuration of BFE. You can start with this file to understand the configuration file. In addition to port configuration, it also includes server basic configuration (such as `MaxCpus`, `Layer4LoadBalancer`, `KeepAliveEnabled`, `Modules`, etc.), TLS basic configuration (`[HttpsBasic]`), Session Cache (`[SessionCache]`) and Session Ticket (`[SessionTicket]`), etc. For the description of each configuration item, please refer to [bfe.conf Configuration Document](../../../../bfe/docs/en_us/configuration/bfe.conf.md).
 
 You can view the default port configuration in bfe.conf. Users can modify the listening port as needed.
 
@@ -83,6 +83,40 @@ An example of this configuration file is as follows:
 
 ```
 
+### Tenant VIP Configuration vip_rule.data (Optional)
+
+`conf/server_data_conf/vip_rule.data` records the VIP list of each tenant, which can be used to distinguish tenants by access IP. Example:
+
+```json
+{
+    "Version": "1",
+    "Vips": {
+        "example_product": [
+            "111.111.111.111"
+        ]
+    }
+}
+```
+
+### Naming Service Configuration name_conf.data (Optional)
+
+`conf/server_data_conf/name_conf.data` records the mapping between service names and service instances, such as the backend addresses of named services like Redis and cache. This configuration is optional and is only loaded when `NameConf` is configured in the `[Server]` section of `bfe.conf`. Example:
+
+```json
+{
+    "Version": "1",
+    "Config": {
+        "example.redis.cluster": [
+            {
+                "Host": "192.168.1.1",
+                "Port": 6439,
+                "Weight": 10
+            }
+        ]
+    }
+}
+```
+
 ### Route Rule Configuration route_rule.data
 conf/server_data_conf/route_rule.data is the routing configuration file of BFE.
 
@@ -102,6 +136,23 @@ In the following example, "Cond" uses the condition primitive req_host_in(), BFE
             {
                 "Cond": "default_t()",
                 "ClusterName": "cluster_default"
+            }
+        ]
+    }
+}
+```
+
+In addition to `ProductRule`, `route_rule.data` also supports optional `BasicRule`, which is used for static routing based on Host+Path. `BasicRule` is organized by product, and each rule contains `Hostname`, `Path`, and `ClusterName`; no condition expression is required for matching, and the speed is faster. Example:
+
+```json
+{
+    "Version": "1",
+    "BasicRule": {
+        "example_product": [
+            {
+                "Hostname": "example.org",
+                "Path": "/api/",
+                "ClusterName": "cluster_A"
             }
         ]
     }
@@ -140,36 +191,44 @@ For the above example, the following configurations can be used:
             "ClusterBasic": {
                 "TimeoutReadClient": 30000,
                 "TimeoutWriteClient": 60000,
-                "TimeoutReadClientAgain": 30000,
+                "TimeoutReadClientAgain": 30000
             }
         }
     }
 }
 ```
 
-There are many configuration items in cluster_conf.data. The specific description of each item is as follows:
+There are many configuration items in cluster_conf.data. The specific description of each item is as follows (for full details and advanced usage, see [BFE documentation](../../../../bfe/docs/en_us/configuration/server_data_conf/cluster_conf.data.md)):
 
 * Backend basic configuration BackendConf 
 
 
 | Configuration Item | Description                |
 | --------------------- | ----------------------- |
+| BackendConf.Protocol | String<br>Protocol of the backend service, supports `http`, `https`, `fcgi`, `tcp`, `ws`, `h2c`. Default value is `http`. |
 | BackendConf.TimeoutConnSrv        | Integer<br>Timeout for connecting backend, in ms. Default value is 2000. |
-| BackendConf.TimeoutResponseHeader | Integer<br>Timeout for reading response header, in ms. Default value is 60000. |
-| BackendConf.MaxIdleConnsPerHost   | Integer<br>Max idle connections to each backend per BFE. Default value is 2. |
-| BackendConf.MaxConnsPerHost   | Integer<br>Max number of concurrent connections to each backend per BFE. 0 means no limitation. Default value is 0. |
+| BackendConf.TimeoutResponseHeader | Integer<br>Timeout for reading response header from backend, in ms. Default value is 60000. |
+| BackendConf.MaxIdleConnsPerHost   | Integer<br>Max idle persistent connections between the BFE instance and each backend. Default value is 2. |
+| BackendConf.MaxConnsPerHost   | Integer<br>Max persistent connections between the BFE instance and each backend; 0 means unlimited. Default value is 0. |
+| BackendConf.SlowStartTime | Integer<br>Slow start time for backend instances, in seconds; 0 means disabled. Default value is 0. |
 | BackendConf.RetryLevel            | Integer<br>Retry level if request fail. 0: retry after connecting backend fails; 1: retry after connecting backend fails or forwarding GET request fails. Default value is 0. |
+| BackendConf.OutlierDetectionHttpCode | String<br>Backend response status code anomaly check, e.g. `"500"`, `"5xx"`; empty string means disabled. Default value is `""`. |
+| BackendConf.FCGIConf | Object<br>FastCGI protocol configuration, only effective when `Protocol` is `fcgi`. |
+| BackendConf.FCGIConf.Root | String<br>Root folder location of the website, required when FCGIConf is configured. |
+| BackendConf.FCGIConf.EnvVars | Map[string]string<br>Extended environment variables. |
 
 * Health Check Configuration CheckConf
 
 | Configuration Item | Description                                              |
 | ------------------------ | ------------------------------------------------------------ |
-| CheckConf.Schem         | String<br>Protocol for health check (HTTP/TCP). Default value is http. |
-| CheckConf.Uri           | String<br>Uri used in health check (HTTP only). Default value is "/health_check". |
-| CheckConf.Host          | String<br>Host used in health check (HTTP only). Default value is "". |
-| CheckConf.StatusCode    | Integer<br>Expected response code (HTTP only). Default value is 200. And 0 means any response code is considered valid. |
-| CheckConf.FailNum       | Integer<br>Failure threshold (consecutive failures of forwarded requests), which will trigger BFE to set the backend instance to unavailable state and start the health check. |
-| CheckConf.SuccNum       | Integer<br>Healthy threshold (consecutive successes of health check request), which will trigger BFE to set the backend instance to available state and stop the health check. |
+| CheckConf.Schem         | String<br>Protocol for health check, supports `HTTP`, `HTTPS`, `TCP`, `TLS`. Default value is `HTTP`. |
+| CheckConf.HostType | String<br>Health check request Host type; `HOST` uses `CheckConf.Host`, `_ADDR` uses the backend instance address. Default value is `HOST`. |
+| CheckConf.Uri           | String<br>Uri used in health check (HTTP/HTTPS only). Default value is `/health_check`. |
+| CheckConf.Host          | String<br>Host used in health check (HTTP/HTTPS only). Default value is `""`. |
+| CheckConf.StatusCode    | Integer<br>Expected response status code (HTTP/HTTPS only); 0 means any status code is acceptable. Default value is 0. |
+| CheckConf.StatusCodeRange | String<br>Expected response status code range, e.g. `"5xx"`, `"503|4xx"`; ignored if `StatusCode` is configured. |
+| CheckConf.FailNum       | Integer<br>Health check activation threshold; after forwarding requests fail consecutively for FailNum times, the backend instance is marked as unavailable and health check is initiated. Default value is 5. |
+| CheckConf.SuccNum       | Integer<br>Health check success threshold; after health check succeeds consecutively for SuccNum times, the backend instance is marked as available. Default value is 1. |
 | CheckConf.CheckTimeout  | Integer<br>Timeout for health check, in ms. Default value is 0, which means no timeout. |
 | CheckConf.CheckInterval | Integer<br>Interval of health check, in ms. Default value is 1000. |
 
@@ -179,6 +238,49 @@ There are many configuration items in cluster_conf.data. The specific descriptio
 | -------------------- | ------------------------------------------------------------ |
 | GslbBasic.CrossRetry | Integer<br>Max cross sub-clusters retry times. Default value is 0. |
 | GslbBasic.RetryMax   | Integer<br>Max retry times within same sub-cluster. Default value is 2. |
+| GslbBasic.BalanceMode | String<br>Load balancing mode, supports `WRR` (Weighted Round Robin), `WLC` (Weighted Least Connections), `EPP` (External Policy). Default value is `WRR`. |
+| GslbBasic.EPPAddr | []String<br>List of EPP server addresses, required only when `BalanceMode` is `EPP`. |
+| GslbBasic.HashConf | Object<br>Hash strategy configuration for session persistence. |
+| GslbBasic.HashConf.HashStrategy | Integer<br>Hash strategy: 0 (ClientIdOnly), 1 (ClientIpOnly), 2 (ClientIdPreferred), 3 (RequestURI). Default value is 1. |
+| GslbBasic.HashConf.HashHeader | String<br>Request header used for hashing; for Cookie, the format is `"Cookie:key"`. |
+| GslbBasic.HashConf.SessionSticky | Boolean<br>Whether to enable session persistence; when `false`, the session persistence level is at the sub-cluster level. Default value is `false`. |
+
+* Cluster Basic Configuration ClusterBasic
+
+| Configuration Item   | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| ClusterBasic.TimeoutReadClient | Integer<br>Timeout for reading the client request body, in ms. Default value is 30000. |
+| ClusterBasic.TimeoutWriteClient | Integer<br>Timeout for writing the response, in ms. Default value is 60000. |
+| ClusterBasic.TimeoutReadClientAgain | Integer<br>Timeout for idle connections, in ms. Default value is 60000. |
+| ClusterBasic.ReqWriteBufferSize | Integer<br>Request write buffer size, in Bytes. Default value is 512. |
+| ClusterBasic.ReqFlushInterval | Integer<br>Interval for flushing requests, in ms; 0 means no periodic flushing. Default value is 0. |
+| ClusterBasic.ResFlushInterval | Integer<br>Interval for flushing responses, in ms; -1 means no caching of responses. Default value is -1. |
+| ClusterBasic.CancelOnClientClose | Boolean<br>Whether to cancel the blocking state when the client disconnects while the server is reading the backend response. Default value is `false`. |
+| ClusterBasic.DisableHostHeader | Boolean<br>Whether to disable the Host header automatically added/overridden by BFE. Default value is `false`. |
+| ClusterBasic.DisableHealthCheck | Boolean<br>Whether to disable health check for this cluster. Default value is `false`. |
+
+* Backend Service HTTPS Configuration HTTPSConf
+
+| Configuration Item   | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| HTTPSConf.RSHost | String<br>Hostname of the backend service instance, used to verify the server certificate. |
+| HTTPSConf.RSInsecureSkipVerify | Boolean<br>Whether to skip backend server certificate verification. Default value is `false`. |
+| HTTPSConf.RSCAList | []String<br>Backend server certificate CA list; if not configured, the system default CA pool is used. |
+| HTTPSConf.BFECertFile | String<br>Certificate file path used by BFE when forwarding HTTPS requests to the backend (PEM format, required for mutual authentication). |
+| HTTPSConf.BFEKeyFile | String<br>Private key file path used by BFE when forwarding HTTPS requests to the backend (PEM format, required for mutual authentication). |
+
+* AI Service Configuration AIConf
+
+| Configuration Item   | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| AIConf.Type | Integer<br>AI service type; currently reserved; keep it 0. |
+| AIConf.Provider | String<br>Provider name of this cluster in `model_prices`. |
+| AIConf.Keys | []Object<br>API-Key list for the backend large model service; selected by weighted random. |
+| AIConf.KeyPolicy | Object<br>API-Key selection policy and retry/backoff configuration in multi-Key scenarios. |
+| AIConf.ModelMapping | Map[string]string<br>Mapping from original request model to backend service model. |
+| AIConf.MatchPrefix | String<br>Provider/model prefix to match; must end with `/`. |
+| AIConf.StripPrefix | Boolean<br>Whether to strip the prefix specified by `MatchPrefix`. Default value is `false`. |
+| AIConf.ModelTable | Object<br>Model pricing table of this cluster; automatically populated by the control plane. |
 
 ### Configure Backend Cluster Instance
 The configuration of this part includes:
@@ -243,7 +345,7 @@ After completing the above configuration, restart the bfe instance to make the c
 ## Test of BFE Service
 On the client side, use the "curl" command to access the address and port of BFE. You can see that the request is forwarded to the backend server instance.
 
-> Note: The curl command needs to specify the Host field in the request header through the parameter -H "Host: example.org", otherwise it will receive a 500 error.
+> Note: The curl command needs to specify the Host field in the request header through the parameter `-H "Host: example.org"`, otherwise it will receive a 500 error.
 
 
 ## Reload of Configuration
@@ -252,7 +354,13 @@ After the above configuration is modified, you can also reload the configuration
 
 The configuration of BFE can be roughly divided into two parts: normal configuration and dynamic configuration. For normal configurations, such as bfe.conf, the BFE process needs to be restarted before the new configuration can take effect.
 
-For dynamic configuration,  the re-loading of the configuration file can be triggered by accessing the monitoring port, which is 8421 by default. There is no need to restart the BFE process, which has no impact on the service. For details, please refer to [Configuration Management](../../design/configuration/configuration.md).
+For dynamic configuration, the re-loading of the configuration file can be triggered by accessing the monitoring port, which is 8421 by default. There is no need to restart the BFE process, which has no impact on the service. For example, to reload content routing configuration, execute:
+
+```bash
+curl http://localhost:8421/reload/server_data_conf
+```
+
+The complete list of reload APIs can be viewed at `http://localhost:8421/reload`; this interface only allows access from localhost (127.0.0.1/::1) via GET requests. For details, please refer to [Configuration Management](../../design/configuration/configuration.md) and [BFE Configuration Reload Document](../../../../bfe/docs/en_us/operation/reload.md).
 
 ## links
 Previous: [Chap19 Installation And Deployment of BFE Service](../../../en_us/operation/installation/installation.md)  

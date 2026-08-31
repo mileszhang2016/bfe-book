@@ -64,21 +64,28 @@ tlsNextProto[tls_rule_conf.SPDY31] = bfe_spdy.NewProtoHandler(nil)
 tlsNextProto[tls_rule_conf.HTTP2] = bfe_http2.NewProtoHandler(nil)
 tlsNextProto[tls_rule_conf.STREAM] = bfe_stream.NewProtoHandler(
 		&bfe_stream.Server{BalanceHandler: srv.Balance})
+
+httpNextProto[bfe_websocket.WebSocket] = bfe_websocket.NewProtoHandler(
+		&bfe_websocket.Server{BalanceHandler: srv.Balance})
 ```
 
 + Step 3 **Connection protocol processing**: Distinguish connection protocols, and execute:
 
-  - If it is an HTTP (S) connection, read and process the requests in the current Goroutine in sequence
+  - If it is an HTTP (S) connection, read and process the requests in the current Goroutine in sequence; if the first request carries a WebSocket upgrade header, it is upgraded to the WebSocket protocol
 
   - If it is an HTTP2/SPDY connection, read and process the request concurrently in the new Goroutine 
 
   - If it is a STREAM connection, the two-way forwarding of data is processed in the new Goroutine (omitted below)
+
+  - If it is a WebSocket connection, complete the handshake in the new Goroutine and proxy the bidirectional data stream
 
 ​       For details of protocol implementation, please refer to the chapter [Core Protocol Implementation](../protocol/protocol. md).
 
 ## Processing of Request
 
 The object for connection bfe_server.conn executes the serveRequest function to process the request. Although HTTP/HTTPS/HTTP2/SPDY use different methods to transmit data, BFE receives HTTP requests from the protocol layer and converts them to the same internal request type (bfe_http.Request) at the upper layer, and performs unified logical processing.
+
+When the server configuration enables AI Gateway (`Server.EnableAiGateway`), the request enters the dedicated AI gateway processing path: `ReverseProxy.ServeHTTPForAI`. This path reuses tenant routing and callback points from the normal request flow, but selects the target model cluster based on the AI routing result (`AiRouteResult`) and supports retry and fallback. When AI Gateway is not enabled, the normal `ReverseProxy.ServeHTTP` path is used.
 
 The specific process of request processing is as follows:
 
@@ -149,11 +156,24 @@ if hl != nil {
 }
 ```
 
-- Step 6 **Request pre-processing**:
+- Step 6 **Callback point processing**: Execute the callback function chain of the callback point HandleForward
+
+```go
+// bfe_server/reverseproxy.go
+
+// Callback for HandleForward
+hl = srv.CallBacks.GetHandlerList(bfe_module.HandleForward)
+if hl != nil {
+    retVal = hl.FilterForward(basicReq)
+    ...
+}
+```
+
+- Step 7 **Request pre-processing**:
 
   Before the final forwarding of the request, preprocess the request and obtain the forwarding parameters (such as the timeout)
 
-- Step 7 **Load balancing and forwarding**:
+- Step 8 **Load balancing and forwarding**:
 
   Forward HTTP requests to the downstream cluster. See the description in [Load Balancing](../balancing/balancing. md) for details
 
@@ -165,7 +185,7 @@ basicReq.HttpResponse = res
 ```
 
 
-- Step 8 **Callback point processing**: Execute the callback function chain of the callback point HandleReadResponse
+- Step 9 **Callback point processing**: Execute the callback function chain of the callback point HandleReadResponse
 ```go
 // bfe_server/reverseproxy.go
 
@@ -177,7 +197,7 @@ if hl != nil {
 ```
 
 
-- Step 9 **Response sending**: send the response to the client
+- Step 10 **Response sending**: send the response to the client
 
 ```go
 // bfe_server/reverseproxy.go
@@ -203,6 +223,8 @@ if hl != nil {
 ```
 
 - Check whether the connection needs to be closed (for example, the request is blocked or HTTP KeepAlive is not enabled)
+  - If the callback chain returns `BfeHandlerClose`, the corresponding action `closeDirectly` closes the connection directly without sending any response to the client
+  - If it returns `BfeHandlerFinish` or a processing error occurs, the corresponding action `closeAfterReply` closes the connection after sending the response
 
 - If it needs to be closed, the connection will stop reading subsequent requests and perform the closing operation
 

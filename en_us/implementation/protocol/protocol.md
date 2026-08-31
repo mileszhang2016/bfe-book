@@ -1,8 +1,8 @@
 # Implementation of Core Protocols
 
-In BFE, HTTP/HTTP2/SPDY/WebSocket/TLS and other network protocols are based on the official open source library of Go language. In order to better meet the scenario of reverse proxy, customization development has been carried out in BFE, including performance optimization, improvement of anti-attack mechanism, compatibility improvement, and addition of monitor probes.
+In BFE, HTTP/HTTP2/SPDY/WebSocket/TLS/gRPC and other network protocols, as well as stream proxy (Layer-4 stream proxy) and PROXY protocol, are based on the official open source library of Go language. In order to better meet the scenario of reverse proxy, customization development has been carried out in BFE, including performance optimization, improvement of anti-attack mechanism, compatibility improvement, and addition of monitor probes.
 
-This chapter focuses on the implementation of HTTP/HTTP2 protocol. The implementation of SPDY is very similar to that of HTTP2, so it will not be repeated here. For the implementation of other protocols, please refer to the instructions in [Layout of BFE Code Base](../source_layout/source_layout md) to check the corresponding source code, and can also ask questions in the BFE open source community.
+This chapter focuses on the implementation of HTTP/HTTP2 protocol. The implementation of SPDY is very similar to that of HTTP2, so it will not be repeated here. For the implementation of other protocols (such as stream proxy, PROXY protocol, etc.), please refer to the instructions in [Layout of BFE Code Base](../source_layout/source_layout.md) to check the corresponding source code, and can also ask questions in the BFE open source community.
 
 ## Implementation of HTTP
 
@@ -13,7 +13,7 @@ The following code is included in the bfe_http directory:
 ```bash
 $ ls bfe/bfe_http
 chunked.go       cookie.go       header_test.go  readrequest_test.go   response.go            sniff.go     transfer_test.go
-chunked_test.go  cookie_test.go  httputil        request.go            response_test.go       state.go     transport.go
+chunked_test.go  cookie_test.go  httputil        method.go             request.go             response_test.go       state.go     transport.go
 client.go        eof_reader.go   lex.go          request_test.go       response_writer.go     status.go
 common.go        header.go       lex_test.go     requestwrite_test.go  responsewrite_test.go  transfer.go
 ```
@@ -25,6 +25,7 @@ The functions of each document are described as follows:
 | basic     | common.go          | Type definition of HTTP basic data                           |
 |           | state.go           | Internal status indicator of HTTP protocol                   |
 |           | eof_reader.go      | It is the type definition of EoReader, implements the io.ReadCloser interface, and returns EOF forever |
+|           | method.go          | Definition of standard HTTP request methods                  |
 | protocol  | request.go         | Definition of HTTP request type                              |
 |           | response.go        | Definition of HTTP response type                             |
 |           | header.go          | HTTP header type definition and related operations           |
@@ -277,9 +278,9 @@ The following code is included in the bfe_http2 directory:
 
 ```bash
 $ls bfe/bfe_http2
-errors.go       flow_test.go   headermap.go  http2_test.go     server_test.go  transport.go   z_spec_test.go
-errors_test.go  frame.go       hpack         priority_test.go  state.go        write.go
-flow.go         frame_test.go  http2.go      server.go         testdata        writesched.go
+errors.go       fingerprint.go       frame.go   headermap.go  http2_test.go     server_test.go  transport.go   z_spec_test.go
+errors_test.go  fingerprint_test.go  frame_test.go  hpack         priority_test.go  state.go        write.go
+flow.go         flow_test.go         http2.go      server.go     testdata          writesched.go
 ```
 
 The functions of each document are described as follows:
@@ -296,6 +297,7 @@ The functions of each document are described as follows:
 |                   | errors.go     | Error definition of HTTP2 protocol                           |
 |                   | state.go      | Internal status indicator of HTTP2 protocol                  |
 | Auxiliary tools   | transport.go  | HTTP2 client encapsulation; Only used to communicate with backend instances |
+|                   | fingerprint.go | HTTP/2 connection fingerprint calculation                    |
 
 
 ### HTTP2 Connection Processing Module
@@ -420,15 +422,28 @@ The master Goroutine communicates with other Goroutines through the Golang chann
 func (sc *serverConn) serve() {
     ...
   
-  	// Write HTTP2 Settings frame and read preface.
-    sc.writeFrame(frameWriteMsg{write: writeSettings{...}})
-    err := sc.readPreface()
+    // Write HTTP2 Settings frame and read preface.
+    sc.writeFrame(frameWriteMsg{
+        write: writeSettings{
+            {SettingMaxFrameSize, sc.srv.maxReadFrameSize()},
+            {SettingMaxConcurrentStreams, sc.advMaxStreams},
+            {SettingMaxHeaderListSize, sc.maxHeaderListSize()},
+            {SettingInitialWindowSize, uint32(sc.srv.initialStreamRecvWindowSize(sc.rule))},
+        },
+    })
+    sc.unackedSettings++
+
+    if err := sc.readPreface(); err != nil {
+        ...
+        return
+    }
     ...
 
     // Start readFrames/writeFrames goroutines.
     go sc.readFrames()
     go sc.writeFrames()
 
+    settingsTimer := time.NewTimer(firstSettingsTimeout)
     for {
         select {
         case wm := <-sc.wantWriteFrameCh:
@@ -437,17 +452,30 @@ func (sc *serverConn) serve() {
             sc.wroteFrame(res)
         case res := <-sc.readFrameCh:
             if !sc.processFrameFromReader(res) {
-            return
+                return
             }
+            // collect HTTP/2 fingerprint information
+            sc.fingerprint.ProcessFrame(res)
+            res.readMore()
             ...
         case m := <-sc.bodyReadCh:
             sc.noteBodyRead(m.st, m.n)
+        case <-settingsTimer.C:
+            ...
+            return
+        case <-sc.shutdownTimerCh:
+            ...
+            return
+        case ch := <-sc.timeoutEventCh:
+            sc.handleTimeout(ch)
+        case v := <-sc.timeoutValueCh:
+            sc.setTimeout(v)
         case <-sc.closeNotifyCh: // graceful shutdown
             sc.goAway(ErrCodeNo)
             sc.closeNotifyCh = nil
         ...
-		}
-	}
+        }
+    }
 }
 ```
 
@@ -474,12 +502,27 @@ func (sc *serverConn) processHeaders(f *MetaHeadersFrame) error {
         state: stateOpen,
         isw:   sc.srv.initialStreamRecvWindowSize(sc.rule),
     }
+    if f.StreamEnded() {
+        st.state = stateHalfClosedRemote
+    }
+    st.cw.Init()
+
+    st.flow.conn = &sc.flow
+    st.flow.add(sc.initialWindowSize)
+    st.inflow.conn = &sc.inflow
+    st.inflow.add(int32(st.isw))
+
+    sc.streams[id] = st
     ...
 
-    // Create the Reqeust and ResponseWriter
+    // Create the Request and ResponseWriter
     rw, req, err := sc.newWriterAndRequest(st, f)
     if err != nil {
         return err
+    }
+    st.reqTrailer = req.Trailer
+    if st.reqTrailer != nil {
+        st.trailer = make(http.Header)
     }
     st.body = req.Body.(*RequestBody).pipe // may be nil
     st.declBodyBytes = req.ContentLength
@@ -487,6 +530,11 @@ func (sc *serverConn) processHeaders(f *MetaHeadersFrame) error {
 
     // Process the request in a new goroutine
     handler := sc.handler.ServeHTTP
+    if !disableConnHeaderCheck {
+        if err := checkValidHTTP2Request(req); err != nil {
+            handler = new400Handler(err)
+        }
+    }
     go sc.runHandler(rw, req, handler)
     return nil
 }

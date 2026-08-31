@@ -10,12 +10,30 @@ In this file, for the product to be configured, modify the "NextProtos" and add 
 As shown in the following example, we modified the product "example_product" and added "h2".
 
 ```json
-"example_product": {
-    ...
-    "NextProtos": ["h2", "http/1.1"],
-    ...
+{
+    "Version": "20190101000000",
+    "DefaultNextProtos": ["http/1.1"],
+    "Config": {
+        "example_product": {
+            ...
+            "NextProtos": ["h2", "http/1.1"],
+            ...
+        }
+    }
 }
 ```
+
+The top-level "DefaultNextProtos" specifies the default ALPN protocol list for products that do not explicitly configure "NextProtos"; the default value is `["http/1.1"]`.
+
+Each item in "NextProtos" also supports parameterized syntax in the form `proto;level=0;mcs=200;isw=65535;rate=100;pp=0`. The meaning of each parameter is as follows:
+
+| Parameter | Meaning | Default | Valid Range |
+| --------- | ------- | ------- | ----------- |
+| level | Negotiation level. 0 means optional; 1 means negotiable but cannot be disabled; 2 means mandatory | 0 | [0, 2] |
+| mcs | Max concurrent streams per connection (effective for h2) | 200 | > 0 |
+| isw | Initial stream window size for the server (effective for h2) | 65535 | [65535, 262144] |
+| rate | Presence rate for optional protocols | 100 | [0, 100] |
+| pp | PROXY protocol version sent to the backend, 0 to disable, 1 for v1, 2 for v2 (effective only for stream) | 0 | [0, 2] |
 
 Use curl to connect to the HTTPS port of BFE for testing. You can see that the connection has used HTTP/2.
 
@@ -46,10 +64,15 @@ The above "NextProtos" configuration includes both "h2" and "http/1.1", which me
 If you want to use only HTTP/2, you can set "NextProtos" to "h2; level=2". Level is the negotiation level, and 2 means "required". Here is an example:
 
 ```json
-"example_product": {
-    ...
-    "NextProtos": ["h2;level=2"],
-    ...
+{
+    "Version": "20190101000000",
+    "Config": {
+        "example_product": {
+            ...
+            "NextProtos": ["h2;level=2"],
+            ...
+        }
+    }
 }
 ```
 
@@ -57,10 +80,15 @@ If you want to use only HTTP/2, you can set "NextProtos" to "h2; level=2". Level
 Similar to HTTP/2, set "spdy/3.1" in "NextProtos" to enable SPDY support.
 
 ```json
-"example_product": {
-    ...
-    "NextProtos": ["spdy/3.1", "http/1.1"],
-    ...
+{
+    "Version": "20190101000000",
+    "Config": {
+        "example_product": {
+            ...
+            "NextProtos": ["spdy/3.1", "http/1.1"],
+            ...
+        }
+    }
 }
 ```
 
@@ -98,15 +126,21 @@ Use curl to connect to the HTTP port of BFE for testing, with header: "Connectio
 
 ### Support WSS(WebSocket over TLS)
 
-To support WSS, set the following in "NextProtos":
+WSS is WebSocket over TLS. After the TLS handshake terminates, BFE processes requests as HTTP/1.1, so you only need to ensure that "http/1.1" is included in "NextProtos" to support WSS; there is no need to use "stream".
 
 ```json
-"example_product": {
-    ...
-    "NextProtos": ["stream;level=2"],
-    ...
+{
+    "Version": "20190101000000",
+    "Config": {
+        "example_product": {
+            ...
+            "NextProtos": ["http/1.1"],
+            ...
+        }
+    }
 }
 ```
+
 Use curl to connect to the HTTPS port of BFE for testing. You can see that the connection is also upgraded to use WebSocket:
 
 ```
@@ -137,32 +171,81 @@ Use curl to connect to the HTTPS port of BFE for testing. You can see that the c
 ...
 ```
 
+## L4 Stream Proxy
+
+"stream" is used to enable Layer-4 TCP stream proxy. Unlike WSS, stream does not parse HTTP/1.1 requests; it directly forwards the TLS connection to the backend. To force the use of stream, configure "stream;level=2" in "NextProtos".
+
+```json
+{
+    "Version": "20190101000000",
+    "Config": {
+        "example_product": {
+            ...
+            "NextProtos": ["stream;level=2;pp=2"],
+            ...
+        }
+    }
+}
+```
+
+The "pp" parameter controls the PROXY protocol version sent to the backend: 0 to disable, 1 for v1, and 2 for v2.
+
 ## Protocols for Connecting Backend Services
 
 BFE supports connecting back-end servers using different protocols. We can specify this configuration in the backend cluster configuration file "conf/server_data_conf/cluster_conf.data". Supported protocols include:
 
 * HTTP
-
+* HTTPS
 * h2c
-
 * FastCGI
+* TCP
+* WS
 
 ### HTTP
 
 HTTP is the default protocol used to connect to the backend, without special configuration.
+
+### HTTPS
+
+To support HTTPS, set the "Protocol" in "BackendConf" to "https", and configure the backend service hostname, certificate, CA, etc. in "HTTPSConf".
+
+```json
+{
+    "Version": "20190101000000",
+    "Config": {
+        "cluster_example": {
+            ...
+            "BackendConf": {
+                "Protocol": "https",
+                ...
+            },
+            "HTTPSConf": {
+                "RSHost": "www.example.org",
+                "RSInsecureSkipVerify": false
+            },
+            ...
+        }
+    }
+}
+```
 
 ### h2c
 
 To support h2c, set the "Protocol" in "BackendConf" to "h2c".
 
 ```json
-"cluster_example": {
-    ...
-    "BackendConf": {
-        "Protocol": "h2c",
-        ...
-    },
-    ...
+{
+    "Version": "20190101000000",
+    "Config": {
+        "cluster_example": {
+            ...
+            "BackendConf": {
+                "Protocol": "h2c",
+                ...
+            },
+            ...
+        }
+    }
 }
 ```
 
@@ -170,15 +253,60 @@ To support h2c, set the "Protocol" in "BackendConf" to "h2c".
 To support FastCGI, set the "Protocol" in "BackendConf" to "fcgi". Other parameters that can be set include "Root" for root path of accessing file and "EnvVars" for the environment variable.
 
 ```json
-"cluster_example": {
-    "BackendConf": {
-        "Protocol": "fcgi",
-        ...
-        "FCGIConf": {
-            "Root": "/home/work",
-            "EnvVars": {
-                "VarKey": "VarVal"
-            }    
+{
+    "Version": "20190101000000",
+    "Config": {
+        "cluster_example": {
+            "BackendConf": {
+                "Protocol": "fcgi",
+                ...
+                "FCGIConf": {
+                    "Root": "/home/work",
+                    "EnvVars": {
+                        "VarKey": "VarVal"
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+### TCP
+
+To support Layer-4 TCP proxy backends, set the "Protocol" in "BackendConf" to "tcp". This protocol is often used together with L4 stream proxy.
+
+```json
+{
+    "Version": "20190101000000",
+    "Config": {
+        "cluster_example": {
+            ...
+            "BackendConf": {
+                "Protocol": "tcp",
+                ...
+            },
+            ...
+        }
+    }
+}
+```
+
+### WS
+
+To support WebSocket backends, set the "Protocol" in "BackendConf" to "ws".
+
+```json
+{
+    "Version": "20190101000000",
+    "Config": {
+        "cluster_example": {
+            ...
+            "BackendConf": {
+                "Protocol": "ws",
+                ...
+            },
+            ...
         }
     }
 }

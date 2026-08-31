@@ -1,8 +1,8 @@
 # 核心协议实现
 
-BFE的HTTP/HTTP2/SPDY/WebSocket/TLS等网络协议基于Go语言官方开源协议库。为更好满足反向代理的需求场景，在BFE中进行了二次定制开发，包括性能优化、防攻击机制完善、兼容性改进、增加探针等。
+BFE的HTTP/HTTP2/SPDY/WebSocket/TLS/gRPC等网络协议，以及stream proxy（四层流代理）、PROXY protocol等，基于Go语言官方开源协议库。为更好满足反向代理的需求场景，在BFE中进行了二次定制开发，包括性能优化、防攻击机制完善、兼容性改进、增加探针等。
 
-本章重点介绍HTTP/HTTP2协议的实现。SPDY的实现与HTTP2的实现非常相似，这里不再赘述。其它协议的实现可参考[BFE的代码组织](../source_layout/source_layout.md)中的说明查阅对应源码，也可在BFE开源社区提问交流。
+本章重点介绍HTTP/HTTP2协议的实现。SPDY的实现与HTTP2的实现非常相似，这里不再赘述。其它协议（如stream proxy、PROXY protocol等）的实现可参考[BFE的代码组织](../source_layout/source_layout.md)中的说明查阅对应源码，也可在BFE开源社区提问交流。
 
 ## HTTP协议
 
@@ -13,7 +13,7 @@ BFE的HTTP/HTTP2/SPDY/WebSocket/TLS等网络协议基于Go语言官方开源协�
 ```bash
 $ ls bfe/bfe_http
 chunked.go       cookie.go       header_test.go  readrequest_test.go   response.go            sniff.go     transfer_test.go
-chunked_test.go  cookie_test.go  httputil        request.go            response_test.go       state.go     transport.go
+chunked_test.go  cookie_test.go  httputil        method.go             request.go             response_test.go       state.go     transport.go
 client.go        eof_reader.go   lex.go          request_test.go       response_writer.go     status.go
 common.go        header.go       lex_test.go     requestwrite_test.go  responsewrite_test.go  transfer.go
 ```
@@ -25,14 +25,15 @@ common.go        header.go       lex_test.go     requestwrite_test.go  responsew
 | 基础类型 | common.go          | HTTP基础数据类型定义                                         |
 |          | state.go           | HTTP协议内部状态指标                                         |
 |          | eof_reader.go      | EofReader类型定义，实现了io.ReadCloser接口，并永远返回EOF    |
+|          | method.go          | HTTP标准请求方法定义                                         |
 | 协议消息 | request.go         | HTTP请求类型的定义、读取及发送                               |
 |          | response.go        | HTTP响应类型的定义、读取及发送                               |
 |          | header.go          | HTTP头部类型定义及相关操作                                   |
 |          | cookie.go          | HTTP Cookie字段的处理                                        |
 |          | status.go          | HTTP响应状态码定义                                           |
 |          | lex.go             | HTTP合法字符表                                               |
-| 消息收发 | client.go          | RoundTrpper接口定义，支持并发的发送请求并获取响应            |
-|          | transport.go       | HTTP连接池管理，实现了RoundTrpper接口，在反向代理场景用于管理与后端的HTTP通信 |
+| 消息收发 | client.go          | RoundTripper接口定义，支持并发的发送请求并获取响应           |
+|          | transport.go       | HTTP连接池管理，实现了RoundTripper接口，在反向代理场景用于管理与后端的HTTP通信 |
 |          | transfer.go        | transferWriter/transfterReader类型定义，在反向代理场景用于向后端流式发送请求及读取响应 |
 |          | response_writer.go | ResponseWriter类型定义，在反向代理场景用于构造响应并发送     |
 | 辅助工具 | httputil           | HTTP相关辅助函数                                             |
@@ -278,9 +279,9 @@ type ResponseWriter interface {
 
 ```bash
 $ls bfe/bfe_http2
-errors.go       flow_test.go   headermap.go  http2_test.go     server_test.go  transport.go   z_spec_test.go
-errors_test.go  frame.go       hpack         priority_test.go  state.go        write.go
-flow.go         frame_test.go  http2.go      server.go         testdata        writesched.go
+errors.go       fingerprint.go       frame.go   headermap.go  http2_test.go     server_test.go  transport.go   z_spec_test.go
+errors_test.go  fingerprint_test.go  frame_test.go  hpack         priority_test.go  state.go        write.go
+flow.go         flow_test.go         http2.go      server.go     testdata          writesched.go
 ```
 
 各文件的功能说明如下：
@@ -297,6 +298,7 @@ flow.go         frame_test.go  http2.go      server.go         testdata        w
 |              | errors.go      | HTTP2协议错误定义                       |
 |              | state.go       | HTTP2协议内部状态指标                   |
 | 辅助工具     | transport.go   | 封装了HTTP2客户端；仅用于与后端实例通信 |
+|            | fingerprint.go | HTTP/2连接指纹计算                       |
 
 
 
@@ -418,15 +420,28 @@ func (sc *serverConn) writeFrames() {
 func (sc *serverConn) serve() {
     ...
   
-  	// Write HTTP2 Settings frame and read preface.
-    sc.writeFrame(frameWriteMsg{write: writeSettings{...}})
-    err := sc.readPreface()
+    // Write HTTP2 Settings frame and read preface.
+    sc.writeFrame(frameWriteMsg{
+        write: writeSettings{
+            {SettingMaxFrameSize, sc.srv.maxReadFrameSize()},
+            {SettingMaxConcurrentStreams, sc.advMaxStreams},
+            {SettingMaxHeaderListSize, sc.maxHeaderListSize()},
+            {SettingInitialWindowSize, uint32(sc.srv.initialStreamRecvWindowSize(sc.rule))},
+        },
+    })
+    sc.unackedSettings++
+
+    if err := sc.readPreface(); err != nil {
+        ...
+        return
+    }
     ...
 
     // Start readFrames/writeFrames goroutines.
     go sc.readFrames()
     go sc.writeFrames()
 
+    settingsTimer := time.NewTimer(firstSettingsTimeout)
     for {
         select {
         case wm := <-sc.wantWriteFrameCh:
@@ -435,17 +450,30 @@ func (sc *serverConn) serve() {
             sc.wroteFrame(res)
         case res := <-sc.readFrameCh:
             if !sc.processFrameFromReader(res) {
-            return
+                return
             }
+            // collect HTTP/2 fingerprint information
+            sc.fingerprint.ProcessFrame(res)
+            res.readMore()
             ...
         case m := <-sc.bodyReadCh:
             sc.noteBodyRead(m.st, m.n)
+        case <-settingsTimer.C:
+            ...
+            return
+        case <-sc.shutdownTimerCh:
+            ...
+            return
+        case ch := <-sc.timeoutEventCh:
+            sc.handleTimeout(ch)
+        case v := <-sc.timeoutValueCh:
+            sc.setTimeout(v)
         case <-sc.closeNotifyCh: // graceful shutdown
             sc.goAway(ErrCodeNo)
             sc.closeNotifyCh = nil
         ...
-		}
-	}
+        }
+    }
 }
 ```
 
@@ -470,12 +498,27 @@ func (sc *serverConn) processHeaders(f *MetaHeadersFrame) error {
         state: stateOpen,
         isw:   sc.srv.initialStreamRecvWindowSize(sc.rule),
     }
+    if f.StreamEnded() {
+        st.state = stateHalfClosedRemote
+    }
+    st.cw.Init()
+
+    st.flow.conn = &sc.flow
+    st.flow.add(sc.initialWindowSize)
+    st.inflow.conn = &sc.inflow
+    st.inflow.add(int32(st.isw))
+
+    sc.streams[id] = st
     ...
 
-    // Create the Reqeust and ResponseWriter
+    // Create the Request and ResponseWriter
     rw, req, err := sc.newWriterAndRequest(st, f)
     if err != nil {
         return err
+    }
+    st.reqTrailer = req.Trailer
+    if st.reqTrailer != nil {
+        st.trailer = make(http.Header)
     }
     st.body = req.Body.(*RequestBody).pipe // may be nil
     st.declBodyBytes = req.ContentLength
@@ -483,6 +526,11 @@ func (sc *serverConn) processHeaders(f *MetaHeadersFrame) error {
 
     // Process the request in a new goroutine
     handler := sc.handler.ServeHTTP
+    if !disableConnHeaderCheck {
+        if err := checkValidHTTP2Request(req); err != nil {
+            handler = new400Handler(err)
+        }
+    }
     go sc.runHandler(rw, req, handler)
     return nil
 }
