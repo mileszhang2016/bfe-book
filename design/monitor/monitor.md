@@ -99,6 +99,7 @@ BFE在 `/monitor` 路径下暴露了多类内部状态接口。访问 `/monitor`
   - `module_handlers`：各模块注册的回调点及回调函数列表
   - `server_stat`：BFE服务器运行状态
   - `proxy_mem_stat`：BFE内存统计
+  - 各扩展模块的计数器：每个模块通过`monitorHandlers`注册自己的监控接口，其计数器可通过`/monitor/<mod_name>`路径访问（如`/monitor/mod_block`），并支持`?format=prometheus`导出
 
 ### 配置热加载接口
 

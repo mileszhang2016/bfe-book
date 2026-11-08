@@ -97,16 +97,23 @@ BFE转发过程中的回调点如下图所示。
 |            | mod_unified_waf    | 支持接入统一的第三方WAF服务进行检测                          |
 |            | mod_cors           | 根据自定义的条件，设置跨源资源共享策略                       |
 |            | mod_secure_link    | 根据自定义的条件，对请求签名或有效期进行验证                 |
-| AI 网关    | mod_ai_token_auth  | 支持大模型 API-Key(token) 鉴权及配额管理                     |
-|            | mod_ai_route       | 根据AI路由规则，将AI请求路由到不同后端集群和模型             |
-|            | mod_body_process   | 提供请求/响应Body的流式处理框架，支持SSE等场景               |
-|            | mod_ai_rate_limit  | 对AI请求按TPM/RPM/并发等维度进行分布式限流                   |
+| AI 网关    | mod_ai_token_auth  | 大模型API-Key鉴权及配额管理                                   |
+|            | mod_ai_route       | AI请求路由                                                   |
+|            | mod_body_process   | 请求/响应Body流式处理                                        |
+|            | mod_ai_rate_limit  | AI请求分布式限流                                             |
+|            | mod_ai_cache       | AI请求缓存（精确/语义）                                      |
+|            | mod_ai_batch       | OpenAI Batch API透传                                         |
+|            | mod_ai_intent      | 语义意图路由                                                 |
+|            | mod_ai_context     | AI上下文压缩/剪枝                                            |
+|            | mod_traffic_mirror | 流量镜像                                                     |
 | 扩展框架   | mod_wasmplugin     | 支持运行遵循proxy-wasm规范的WASM插件，扩展请求/响应处理能力  |
 | 流量可见性 | mod_access         | 以指定格式记录请求日志和会话日志                             |
 |            | mod_access_pb3     | 以Protocol Buffers v3格式记录访问日志                        |
 |            | mod_key_log        | 以NSS key log格式记录TLS会话密钥, 便于基于解密分析TLS密文流量诊断分析 |
 |            | mod_trace          | 根据自定义的条件，为请求开启分布式跟踪                       |
 |            | mod_http_code      | 统计HTTP响应状态码                                           |
+
+AI网关模块的详细设计、配置与实现，参见[Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README-CN.md)一书（[数据面转发设计](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter07-data-plane-design.md)、[认证授权设计](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter08-auth-design.md)、[AI路由规则设计](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter11-ai-route-rules.md)、[配额与限流设计](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter12-quota-and-rate-limit.md)、[模型计费设计](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter13-model-pricing.md)）。
 
 可以通过访问BFE实例的 http://localhost:8299/monitor/module_handlers 监控地址，查看到当前运行的BFE实例中所有的回调点、在各回调点注册的模块回调函数列表以及顺序。
 ## links

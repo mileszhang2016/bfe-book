@@ -23,7 +23,7 @@ BFE的安装软件包可以直接从BFE项目在github.com的页面中下载。
 ### 下载BFE软件包
 以Linux环境为例，下载BFE的1.8.5版本。
 
-在上述下载页面上，找到"BFE v1.8.5"，点击展开“Asserts”，如下图：
+在上述下载页面上，找到"BFE v1.9.0"，点击展开“Asserts”，如下图：
 
 ![](img/v100_assert.png)
 
@@ -58,6 +58,10 @@ bfe.conf
 cluster_conf
 mod_access
 mod_access_pb3
+mod_ai_batch
+mod_ai_cache
+mod_ai_context
+mod_ai_intent
 mod_ai_rate_limit
 mod_ai_route
 mod_ai_token_auth
@@ -82,6 +86,7 @@ mod_static
 mod_tag
 mod_tcp_keepalive
 mod_trace
+mod_traffic_mirror
 mod_trust_clientip
 mod_unified_waf
 mod_userid
@@ -250,7 +255,7 @@ $ docker run -d \
 $ make docker
 ```
 
-构建完成后会得到形如 `bfe:v1.8.5`、`bfe:v1.8.5-debug` 以及 `bfe:latest` 的镜像。
+构建完成后会得到形如 `bfe:v1.9.0`、`bfe:v1.9.0-debug` 以及 `bfe:latest` 的镜像。
 
 如需将镜像推送到远程仓库（例如 GHCR），可使用：
 

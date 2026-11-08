@@ -53,6 +53,7 @@ redirect.data 包含重定向规则，可动态加载。安装包中的示例中
 说明：
 - 每条规则中的"Actions"目前仅支持配置一个动作。
 - "Status"为返回给客户端的HTTP重定向状态码，通常为301、302、303、307、308等合法HTTP重定向状态码。
+- 自v1.9.0起，动作参数支持以`=`前缀嵌入表达式，在请求处理时动态计算目标URL。表达式的语法与可用函数详见[第三十五章 条件表达式引擎](../../develop/expr_condition_engine/expr_condition_engine.md)。
 
 ## 重定向动作
 "Actions"中的"Cmd"指示了如何设置重定向中的URL。

@@ -73,6 +73,11 @@ The copyright of this book belongs to the BFE open source community. The author 
 
 ## Development
 + [Chap 34 How to Develop BFE Extension Module](./en_us/develop/how_to_write_module/how_to_write_module.md)
++ [Chap 35 Condition Expression Engine](./en_us/develop/expr_condition_engine/expr_condition_engine.md)
 
 ## Appendix
 + [Appendix1 Multi-process GC mechanism of BFE](./en_us/appendix/multi_process_gc/multi_process_gc.md)
+
+## Reference Book
+
+Since v1.8.0, BFE has been adding extension capabilities for AI gateway scenarios: v1.8.0 introduced modules such as token authentication, AI routing and AI rate limiting, and v1.9.0 added AI cache (exact/semantic), Batch passthrough, semantic intent routing, context compression, traffic mirroring, etc. This book does not elaborate on them; for the systematic design, configuration and implementation, see the companion book *Rainway AI Gateway: Principles, Design and Implementation* ([Table of Contents (Chinese)](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README-CN.md), [Table of Contents (English)](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README.md)).

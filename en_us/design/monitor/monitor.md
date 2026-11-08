@@ -105,6 +105,7 @@ BFE exposes multiple internal status interfaces under `/monitor`. Accessing `/mo
   - `module_handlers`: callback points and callback functions registered by each module
   - `server_stat`: BFE server runtime status
   - `proxy_mem_stat`: BFE memory statistics
+  - Per-module counters: each module registers its own monitor handlers via `monitorHandlers`; its counters are accessible at `/monitor/<mod_name>` (e.g. `/monitor/mod_block`) and support `?format=prometheus` export
 
 ### Configuration Hot-Reload Interfaces
 

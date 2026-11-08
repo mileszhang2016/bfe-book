@@ -75,24 +75,15 @@ HTTPS安全性风险来源于CA基础设施、协议及算法漏洞、HTTPS部�
 
 
 
-### 分布式TLS会话缓存
+### 基于标准库crypto/tls的TLS实现
 
-BFE支持将TLS会话状态，存储在分布式Cache集群中。客户端与BFE集群中任一实例连接后，可基于Session ID完成会话复用握手，从而提升在集群部署模式下的TLS会话复用率。
+在v1.9.0之前的版本中，BFE为维护MultiCert（按VIP/SNI动态选择证书）、ServerRule（按VIP/SNI匹配TLS规则）等定制能力，对Go标准库crypto/tls进行了完整fork（bfe_tls目录）。fork的代价是无法获得标准库多年累积的安全修复与TLS 1.3支持。
 
+自v1.9.0起，BFE移除了该fork，TLS实现直接基于标准库crypto/tls：MultiCert能力由`GetCertificate`回调实现（VIP从底层连接取，SNI从ClientHello取），ServerRule能力由`GetConfigForClient`回调实现（规则在配置加载时预构建为不可变的tls.Config模板）。由此BFE获得了标准库的安全修复与TLS 1.3支持。配置文件中的相关字段（如`Grade`、`Chacha20`、`DynamicRecord`、`EnableSslv2ClientHello`等）保留解析但不再生效，旧版本配置文件可直接启动。
 
+### TLS会话复用
 
-### TLS会话状态格式 
-
-在上文分布式TLS会话缓存中，存储的会话状态可以采用两种格式：原始格式及OpenSSL格式。如果是BFE新用户，可优先使用原始格式，这种格式更紧凑可降低分布式缓存的存储开销；如果是需要替换基于OpenSSL反向代理，可以配置OpenSSL格式，这样两种程序可兼容读取对方保存的会话状态，实现平滑迁移而不影响会话复用握手。
-
-
-
-### Session Ticket密钥更新
-
-如果Session Ticket key泄漏将无法保障前向安全性。基于Session Ticket会话复用的连接，如果恶意攻击者预先录制流量，后续使用泄漏的Session Ticket key，可以成功计算出会话密钥并解密还原出明文信息。
-
-为了避免以上问题，应定期更新Session Ticket key文件。BFE支持热加载并更新Session Ticket key，同时无需进程热重启导致长连接中断。
-
+BFE支持基于Session ID及Session Ticket的TLS会话复用。自v1.9.0起，BFE使用标准库内置的Session Ticket机制，原先的Redis分布式会话缓存随之移除；`SessionTicketKey`配置保留并支持热加载更新（Session Ticket key应定期更新以保障前向安全性）。在集群部署模式下，可通过多实例配置相同的SessionTicketKey来提升会话复用率。
 
 
 ### OSCP Staple的自适应容错
@@ -148,18 +139,9 @@ Google工程师统计发现现在Chrome代码库中所有严重的安全漏洞�
 
 ### TLS安全等级
 
-正确配置服务的各项TLS/SSL参数（协议版本、加密套件）要求运维人员对TLS/SSL安全有较深入的理解。为降低管理员误配置引入部署安全风险，BFE提供了四种TLS安全等级，具体如下。不同安全等级下BFE所支持的TLS协议版本及加密套件是不同的。
+正确配置服务的各项TLS/SSL参数（协议版本、加密套件）要求运维人员对TLS/SSL安全有较深入的理解。历史上BFE曾提供四种TLS安全等级（A+/A/B/C）来降低管理员误配置风险。
 
-| 安全等级 | 说明                   |
-| -------- | ---------------------- |
-| 等级A+   | 安全性最高、兼容性最低 |
-| 等级A    | 安全性较高、兼容性一般 |
-| 等级B    | 安全性一般、兼容性较高 |
-| 等级C    | 安全性最低、兼容性最高 |
-
-相应的，不同安全等级具有不同的安全性及兼容性，适用不同的业务场景。例如，安全等级A+仅支持TLS 1.2及以上版本和安全强度更高的加密套件。等级A+适用于要求PCI DSS级别安全合规的业务场景，例如金融支付业务。
-
-各安全等级的协议和加密套件的详细定义，见“[配置HTTPS服务](../../operation/configuration/https.md)”中的说明。
+自v1.9.0起，随着bfe_tls fork的移除，`Grade`字段废弃：TLS 1.2的加密套件使用标准库默认的安全子集，TLS 1.3的加密套件由标准库固定提供（不可配置）。原安全等级与协议版本、加密套件的对应关系可参考"配置HTTPS服务"一节中的历史说明，新版本下不再需要选择安全等级。
 
 
 
@@ -173,9 +155,7 @@ Google工程师统计发现现在Chrome代码库中所有严重的安全漏洞�
 
 ### TLS/SSL JA3指纹
 
-BFE支持根据ClientHello消息中特征，计算TLS/SSL客户端的指纹。BFE采用了JA3算法，可简单高效的识别客户端程序，并与业务层联动进行反爬取或反作弊。
-
-在BFE中可以通过mod_header模块，在请求头部中携带JA3指纹传递给下游。具体用法参见开源BFE用户手册mod_header模块相关说明。
+历史版本的BFE（v1.9.0之前）支持根据ClientHello消息特征计算JA3指纹，并可通过mod_header模块将指纹传递给下游，用于反爬取或反作弊。自v1.9.0起，随着bfe_tls fork的移除，JA3指纹能力一并移除。
 
 
 
@@ -199,6 +179,12 @@ HTTPS化对旁路式流量攻击检测以及复杂网络问题诊断带来了挑
 BFE支持按用户抽样灰度更新证书，并支持实时统计新旧证书握手成功率变化，可以快速拦截在小流量阶段，难以通过总流量波动发现的异常。
 
 
+
+### TLS配置的热加载与版本目录
+
+BFE支持通过`/reload/tls_conf`接口对TLS配置做热加载，无需重启进程、不中断长连接。
+
+在配置由分发代理（如conf-agent）以"版本目录＋符号链接"方式下发的部署形态中，可以带`path`参数调用`/reload/tls_conf?path=<版本目录>`：此时server_cert_conf、tls_rule_conf以及tls_conf目录下的client CA/CRL基目录都会被重定位到指定版本目录，使版本目录成为自包含的完整TLS配置单元。BFE在符号链接切换之前先对版本目录做完整加载校验，校验通过的配置才会被激活；配置了tls_conf之外绝对路径的CA/CRL目录则不重定向，保持从配置的绝对路径读取。不带`path`参数的调用与启动加载路径行为不变。
 
 ### 多CA互备证书
 

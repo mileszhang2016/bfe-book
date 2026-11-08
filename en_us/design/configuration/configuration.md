@@ -8,7 +8,7 @@ The configuration files are all located in [/conf](https://github.com/bfenetwork
 
 | Function category             | Directory of file location | Name of configuration file | Description                                                  |
 | ----------------------------- | -------------------------- | -------------------------- | ------------------------------------------------------------ |
-| Main configuration            | /conf/                     | bfe.conf                   | Including basic configuration of BFE, such as service port, default timeout configuration,  loading of extension modules, etc; It also includes the basic configuration of TLS, such as the encryption suite of HTTPS and the configuration of Session Cache. |
+| Main configuration            | /conf/                     | bfe.conf                   | Including basic configuration of BFE, such as service port, default timeout configuration, loading of extension modules, etc; It also includes the basic configuration of TLS, such as the encryption suite of HTTPS and the Session Ticket Key configuration; and security-related configuration, such as the keyring (KeyFile) used to decrypt sensitive fields of delivered configuration files. |
 | Configuration about protocol  | /conf/tls_conf/            | server_cert_conf.data      | Server-side certificate and key configuration.               |
 | Configuration about protocol  | /conf/tls_conf/            | session_ticket_key.data    | TLS Session Ticket Key configuration.                        |
 | Configuration about protocol  | /conf/tls_conf/            | tls_rule_conf.data         | TLS protocol parameters organized by tenant.                 |
@@ -22,7 +22,7 @@ The configuration files are all located in [/conf](https://github.com/bfenetwork
 
 + Configuration files for BFE extension module
 
-  For the convenience of management, the configuration files for BFE extension modules and BFE main logic are stored separately. For each extension module, there is an independent directory for configuration files, which is located in the "/conf/mod_<name>/" directory. For example: The configuration files of mod_block are located in /conf/mod_block/ directory, the configuration files of mod_wasmplugin are located in /conf/mod_wasm/ directory, and the configuration files of AI gateway related modules (mod_ai_route, mod_ai_token_auth, mod_ai_rate_limit, mod_body_process) are located in /conf/mod_ai_route/, /conf/mod_ai_token_auth/, /conf/mod_ai_rate_limit/, /conf/mod_body_process/ directories respectively.
+  For the convenience of management, the configuration files for BFE extension modules and BFE main logic are stored separately. For each extension module, there is an independent directory for configuration files, which is located in the "/conf/mod_<name>/" directory. For example: The configuration files of mod_block are located in /conf/mod_block/ directory, and the configuration files of mod_wasmplugin are located in /conf/mod_wasm/ directory. BFE also has a set of built-in extension modules for AI gateway scenarios (such as mod_ai_route, mod_ai_token_auth, mod_ai_rate_limit, mod_ai_cache, mod_ai_batch, mod_body_process, etc.). Their configuration directories are also located under /conf/mod_<name>/; for configuration details, see the book [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/operation/chapter21-cluster-and-route-config.md).
 
 
 ## Normal Configuration vs Dynamic Configuration
@@ -108,6 +108,17 @@ func (t *ProductRuleTable) Update(conf productRuleConf) {
 ```
 
 The above two interfaces are protected by read-write locks. Moreover, the operation in the critical section should be as simple as possible to reduce the impact on the parallelism of multiple processing coroutines.
+
+## Encryption of Sensitive Fields in Configuration Files
+
+In deployment modes where configurations are delivered centrally by a control plane, some fields of dynamic configuration files may carry sensitive information (such as keys). Since v1.9.0, BFE supports field-level encryption of sensitive fields in delivered configuration files: the sensitive field values are stored on disk in ciphertext with the `enc$v1$` prefix; the file as a whole remains valid JSON and non-sensitive fields stay human-readable; BFE decrypts the fields into memory at load time, selecting the key from a keyring by the key ID embedded in each ciphertext.
+
+Main mechanisms:
+
+- **Keyring configuration**: The `[Security]` section in bfe.conf specifies the keyring file via `KeyFile`. Multiple key IDs can coexist (old and new keys are both present during rotation). The keyring file contains paths only, not key material, and should be stored separately from the conf directory.
+- **Plaintext pass-through compatibility**: Fields without the `enc$v1$` prefix are treated as plaintext. Plaintext and ciphertext can coexist in one file, so canary release and rollback need no version negotiation.
+- **Hot reload**: The keyring is re-read on every data file load. Key rotation only requires updating the keyring file and triggering the existing reload interface, without restart.
+- **Failure semantics**: On decryption failure (missing key, authentication failure), the reload fails and the old configuration remains in effect; if decryption fails at first startup, BFE refuses to start (fail-fast) to avoid silently losing critical configurations such as authentication rules.
 
 ## links
 Previous: [Chap15 Timeout Setting](../../../en_us/design/timeout/timeout.md)  

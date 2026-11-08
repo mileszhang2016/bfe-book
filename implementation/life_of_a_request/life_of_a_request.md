@@ -86,7 +86,7 @@ httpNextProto[bfe_websocket.WebSocket] = bfe_websocket.NewProtoHandler(
 
 BFE的连接对象bfe_server.conn 执行serveRequest函数处理请求。虽然HTTP/HTTPS/HTTP2/SPDY/使用不同方式传输数据，但BFE从协议层接收到HTTP请求后，在上层都转化为相同的内部请求类型(bfe_http.Request)，并执行统一的逻辑处理。
 
-当服务端配置启用AI Gateway（`Server.EnableAiGateway`）时，请求进入专门的AI网关处理路径：`ReverseProxy.ServeHTTPForAI`。该路径复用常规请求处理中的租户路由、回调点等逻辑，但会基于AI路由结果（`AiRouteResult`）选择目标模型集群，并支持重试与回退。未启用AI Gateway时，使用常规的`ReverseProxy.ServeHTTP`路径。
+当服务端配置启用AI Gateway（`Server.EnableAiGateway`）时，请求进入专门的AI网关处理路径（`ReverseProxy.ServeHTTPForAI`），基于AI路由结果选择目标模型集群并支持重试与回退；未启用时使用常规路径。该路径的详细流程参见 [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter07-data-plane-design.md)一书的数据面转发设计一章。
 
 请求处理的具体流程如下：
 

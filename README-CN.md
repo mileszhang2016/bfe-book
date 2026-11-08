@@ -32,6 +32,10 @@ BFE开源项目地址: https://github.com/bfenetworks/bfe
 
 本书著作权归属于BFE开源社区，本书作者对其所编写的内容保留署名权，稿酬将用于BFE开源社区建设。
 
+## 参考书籍
+
+自v1.8.0起，BFE开始内置面向AI网关场景的扩展能力：v1.8.0引入了Token鉴权、AI路由、AI限流等模块，v1.9.0又增加了AI缓存（精确/语义）、Batch透传、语义意图路由、上下文压缩、流量镜像等能力。这部分内容本书不做展开，系统的设计、配置与实现说明参见配套书籍《Rainway AI Gateway: Principles, Design and Implementation》（[中文版目录](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README-CN.md)，[英文版目录](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README.md)）。
+
 
 
 # 全书目录
@@ -82,6 +86,7 @@ BFE开源项目地址: https://github.com/bfenetworks/bfe
 
 ## 开发篇
 + [第三十四章 如何开发BFE扩展模块](./develop/how_to_write_module/how_to_write_module.md)
++ [第三十五章 条件表达式引擎](./develop/expr_condition_engine/expr_condition_engine.md)
 
 ## 附录篇
 + [附1 BFE的多进程GC机制](./appendix/multi_process_gc/multi_process_gc.md)

@@ -8,7 +8,7 @@
 
 | 功能类别     | 配置文件目录位置        | 配置文件                | 说明                                                         |
 | ------------ | ----------------------- | ----------------------- | ------------------------------------------------------------ |
-| 服务基础配置 | /conf/                  | bfe.conf                | 包括BFE的服务基础配置，如：服务端口、缺省超时配置、扩展模块加载等；还包括TLS的基础配置，如：HTTPS的加密套件，Session Cache的配置等。 |
+| 服务基础配置 | /conf/                  | bfe.conf                | 包括BFE的服务基础配置，如：服务端口、缺省超时配置、扩展模块加载等；还包括TLS的基础配置，如：HTTPS的加密套件、Session Ticket Key配置等；以及安全相关的配置，如：下发配置文件解密所用的密钥环（KeyFile）等。 |
 | 接入协议配置 | /conf/tls_conf/         | server_cert_conf.data   | 服务端的证书和密钥配置。                                     |
 | 接入协议配置 | /conf/tls_conf/         | session_ticket_key.data | TLS Session Ticket Key配置。                                 |
 | 接入协议配置 | /conf/tls_conf/         | tls_rule_conf.data      | 按照租户粒度区分的TLS协议参数。                              |
@@ -22,7 +22,7 @@
 
 + BFE扩展模块的配置文件
 
-  出于便于管理的目的，BFE各扩展模块的配置文件和BFE主逻辑的配置文件分开存放。对于每个扩展模块，有一个独立的配置文件目录，位于"/conf/mod_<name>/"目录下。如：/conf/mod_block/目录下是mod_block的配置文件，/conf/mod_wasm/目录下是mod_wasmplugin的配置文件，/conf/mod_ai_route/、/conf/mod_ai_token_auth/、/conf/mod_ai_rate_limit/、/conf/mod_body_process/目录下是AI网关相关模块的配置文件。
+  出于便于管理的目的，BFE各扩展模块的配置文件和BFE主逻辑的配置文件分开存放。对于每个扩展模块，有一个独立的配置文件目录，位于"/conf/mod_<name>/"目录下。如：/conf/mod_block/目录下是mod_block的配置文件，/conf/mod_wasm/目录下是mod_wasmplugin的配置文件。BFE还内置了一组面向AI网关场景的扩展模块（如mod_ai_route、mod_ai_token_auth、mod_ai_rate_limit、mod_ai_cache、mod_ai_batch、mod_body_process等），其配置目录同样位于/conf/mod_<name>/下，配置细节详见[Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/operation/chapter21-cluster-and-route-config.md)一书。
 
 ## 常规配置 vs 动态配置
 
@@ -105,6 +105,18 @@ func (t *ProductRuleTable) Update(conf productRuleConf) {
 ```
 
 以上这两个接口，使用读写锁来保护。并且，在临界区中的操作都尽量简单，以降低对多个处理协程间并行度的影响。
+
+## 配置文件敏感字段的加密保护
+
+在配置由控制面统一下发的部署形态中，部分动态配置文件的字段可能携带敏感信息（如密钥）。自v1.9.0起，BFE支持对下发配置文件的敏感字段做字段级加密：敏感字段值以`enc$v1$`前缀的密文形态落盘，文件整体仍是合法JSON、非敏感字段保持可读；BFE加载时按密文自带的密钥ID从密钥环（keyring）中选钥解密进内存。
+
+主要机制如下：
+
+- **密钥环配置**：在bfe.conf的`[Security]`段通过`KeyFile`指定密钥环文件，支持多密钥ID并存（轮换期新旧密钥同挂）；密钥环文件只含路径、不含密钥材质，且应与conf目录分开存放。
+- **明文直通兼容**：无`enc$v1$`前缀的字段按明文处理，明文/密文可混合存在，灰度与回滚不需要版本协商。
+- **热加载**：每次加载data文件时重读密钥环，轮换密钥只需更新密钥环文件并触发既有的reload接口，无需重启。
+- **失败语义**：解密失败（密钥缺失、认证失败）时reload失败并保留旧配置；首次启动即解密失败则拒绝启动（fail-fast），避免静默丢失鉴权等关键配置。
+
 ## links
 上一章：[第十五章 超时设置](../../design/timeout/timeout.md)  
 下一章：[第十七章 HTTPS优化机制](../../design/https/https.md)

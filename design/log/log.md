@@ -54,6 +54,14 @@ BFE的访问日志由BFE的扩展模块来输出，主要包括以下两种实�
 
 - **mod_access_pb3**：以 [Protocol Buffers v3](https://developers.google.com/protocol-buffers) 二进制格式记录访问日志。该模块输出的日志体积更小、解析效率更高，适合需要高性能采集和下游分析的平台。日志格式定义参见 [bfe-access-pb](https://github.com/bfenetworks/bfe-access-pb)。
 
+## 请求标识（Log ID）
+
+BFE为每个请求和会话分配唯一的Log ID（`X-Bfe-Log-Id`请求头及访问日志`logid`字段），用于全链路的关联检索。
+
+自v1.9.0起，Log ID由32字符的十六进制字符串改为十进制数字字符串，取值为`[1, 2^63-1]`范围内的整数。这样设计的考虑是：访问日志的下游分析系统（如报表数据库）普遍以`BIGINT`存储日志标识，十进制形式可以无损地转换和关联，避免十六进制解析截断导致的数据归并错误。任何消费`X-Bfe-Log-Id`或文本访问日志`log_id`字段的外部系统都需要按新格式解析。
+
+对于无法转换的Log ID（mod_logid未加载、取值异常、滚动升级期间收到的旧版十六进制ID等），BFE会本地重新生成一个非零的Log ID，并通过`LogidRegenerated` / `SessionIdRegenerated`计数器上报该事件，避免静默写0导致下游数据归并。
+
 
 ## links
 上一章：[第十三章 监控机制](../../design/monitor/monitor.md)  

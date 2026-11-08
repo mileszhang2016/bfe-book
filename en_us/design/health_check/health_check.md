@@ -123,6 +123,10 @@ When the load balancer instance uses the active health check results obtained fr
 
 BFE open source project currently only supports passive health checks. The commercial product implemented based on the BFE open source project includes centralized active health check.
 
+Future versions will add distributed active health checks to the BFE open source project.
+
+Since v1.9.0, with the removal of the bfe_tls fork, the HTTPS health check probe uses the standard library crypto/tls for connection establishment: verification of the probe client certificate (RootCAs, ServerName and whether to skip verification) is handled directly by the standard library, and outbound probing gains TLS 1.3 support.
+
 ## links
 Previous: [Chap10 Plugin Architecture](../../../en_us/design/module/module.md)  
 Next: [Chap12 Traffic Limiting](../../../en_us/design/limit/limit.md)

@@ -85,7 +85,7 @@ httpNextProto[bfe_websocket.WebSocket] = bfe_websocket.NewProtoHandler(
 
 The object for connection bfe_server.conn executes the serveRequest function to process the request. Although HTTP/HTTPS/HTTP2/SPDY use different methods to transmit data, BFE receives HTTP requests from the protocol layer and converts them to the same internal request type (bfe_http.Request) at the upper layer, and performs unified logical processing.
 
-When the server configuration enables AI Gateway (`Server.EnableAiGateway`), the request enters the dedicated AI gateway processing path: `ReverseProxy.ServeHTTPForAI`. This path reuses tenant routing and callback points from the normal request flow, but selects the target model cluster based on the AI routing result (`AiRouteResult`) and supports retry and fallback. When AI Gateway is not enabled, the normal `ReverseProxy.ServeHTTP` path is used.
+When the server configuration enables AI Gateway (`Server.EnableAiGateway`), the request enters the dedicated AI gateway forwarding path (`ReverseProxy.ServeHTTPForAI`): the target model cluster is selected based on the AI routing result, with retry and fallback support; when AI Gateway is not enabled, the normal path is used. For the detailed flow of this path, see the [Data Plane Forwarding Design](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/design/chapter07-data-plane-design.md) chapter of the book [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README.md).
 
 The specific process of request processing is as follows:
 

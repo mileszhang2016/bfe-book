@@ -144,7 +144,7 @@ The callback points corresponding to the above forwarding process are as follows
 - **HandleReadResponse**: Executed after the response from the backend is read. Response processing can be performed here, such as compression and body parsing.
 - **HandleRequestFinish**: Executed after the request is fully processed. Finalization work can be performed here, such as logging, quota deduction, and access statistics.
 
-Based on this mechanism, BFE not only has rich built-in extension modules (such as access log, WAF, redirect, rate limiting, distributed tracing, etc.), but also supports flexible extension of new traffic management capabilities through WASM plugins and AI gateway-related modules (such as AI routing, token authentication, AI rate limiting, etc.).
+Based on this mechanism, BFE not only has rich built-in extension modules (such as access log, WAF, redirect, rate limiting, distributed tracing, etc.), but also supports flexible extension of new traffic management capabilities through WASM plugins. For AI gateway scenarios, BFE also has a set of built-in extension modules such as AI routing, token authentication and AI rate limiting; their design is covered in the [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/design/chapter07-data-plane-design.md) book.
 
 ## Discussion on Multi Tenant Mechanism
 

@@ -56,6 +56,8 @@ $ cat rewrite.data
 
 最终，该规则将修改Path为/rewrite开头的请求，为其增加路径前缀/bfe/，也就是将Path从/rewrite变为/bfe/rewrite。
 
+自v1.9.0起，动作参数支持以`=`前缀嵌入表达式（如`"Params": ["=req_host() + '.example.com'"]`），在请求处理时动态计算参数值。表达式的语法与可用函数详见[第三十五章 条件表达式引擎](../../develop/expr_condition_engine/expr_condition_engine.md)。
+
 
 ## 重写动作
 

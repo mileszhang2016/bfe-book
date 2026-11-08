@@ -149,6 +149,14 @@ The precedence and associativity of operators are similar to the C language. The
 | 3          | &&       | logical AND            | Left-to-right |
 | 4          | \|\|     | logical OR             | Left-to-right |
 
+#### Condition Expression Engine (Added in v1.9.0)
+
+The "condition primitive + boolean operator" system described above has limited expressiveness: adding a new matching dimension requires modifying the code to add a new primitive; arithmetic, numeric ranges and multi-value predicates cannot be expressed; and intermediate results cannot be passed between rules.
+
+Since v1.9.0, BFE has introduced a condition expression engine based on [expr-lang/expr](https://expr-lang.org/), running as a second engine alongside the primitive system: new-style expressions (data accessors + expr operators, e.g. `ReqPath() == "/index" && InTimeRange(...)`) and the primitive style are dispatched automatically through the unified load entry, and a process-level three-mode switch (`LegacyFirst`/`ExprCompatible`/`ExprOnly`) supports gradual migration. Under the default mode, existing configurations behave exactly as in older versions.
+
+For the architecture, expression environment and dynamic data sources of the condition expression engine, see "[Chap35 Condition Expression Engine](../../develop/expr_condition_engine/expr_condition_engine.md)".
+
 ### The Content Matched By Condition Primitives
 
 The condition primitive can match the content in the request, response, session and request context. Each condition primitive will accurately match a certain content. This way improves the accuracy of forwarding configuration description, and also improves readability and maintainability.

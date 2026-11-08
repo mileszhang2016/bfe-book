@@ -29,7 +29,7 @@ You can select the software package according to the type of operating system.
 ### Download BFE Package
 Take the Linux environment as an example, download version 1.8.5 of BFE.
 
-On the above download page, find "BFE v1.8.5" and click to expand "Asserts", as shown below:
+On the above download page, find "BFE v1.9.0" and click to expand "Asserts", as shown below:
 
 ![](v100_assert.png)
 
@@ -65,6 +65,10 @@ bfe.conf
 cluster_conf
 mod_access
 mod_access_pb3
+mod_ai_batch
+mod_ai_cache
+mod_ai_context
+mod_ai_intent
 mod_ai_rate_limit
 mod_ai_route
 mod_ai_token_auth
@@ -89,6 +93,7 @@ mod_static
 mod_tag
 mod_tcp_keepalive
 mod_trace
+mod_traffic_mirror
 mod_trust_clientip
 mod_unified_waf
 mod_userid
@@ -257,7 +262,7 @@ In the repository root directory, run:
 $ make docker
 ```
 
-After building, images such as `bfe:v1.8.5`, `bfe:v1.8.5-debug`, and `bfe:latest` will be available.
+After building, images such as `bfe:v1.9.0`, `bfe:v1.9.0-debug`, and `bfe:latest` will be available.
 
 To push the image to a remote registry (e.g., GHCR), use:
 

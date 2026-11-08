@@ -70,19 +70,16 @@ HTTPS services could be built with low risk of change, fast stop loss, and more 
 In order to better adapt to the needs of large sites, BFE has made some targeted improvements compared with common open source solutions. The following is a brief introduction of some differentiation mechanisms.
 
 
-### Distributed TLS Session Cache
+### TLS Implementation Based on Standard Library crypto/tls
 
-BFE supports storing TLS session state in a distributed cache cluster. After the client connects to any instance in the BFE cluster, the session reuse handshake can be completed based on the session ID, thus improving the TLS session reuse rate in the cluster deployment mode.
+Before v1.9.0, in order to maintain customization capabilities such as MultiCert (dynamic certificate selection by VIP/SNI) and ServerRule (matching TLS rules by VIP/SNI), BFE maintained a complete fork of Go's standard crypto/tls (the bfe_tls directory). The cost of the fork was that BFE could not benefit from the security fixes accumulated in the standard library over the years, nor did it support TLS 1.3.
 
-### TLS Session State Format
+Since v1.9.0, BFE has removed this fork and the TLS implementation is directly based on the standard library crypto/tls: the MultiCert capability is implemented by the `GetCertificate` callback (VIP taken from the underlying connection, SNI from ClientHello), and the ServerRule capability is implemented by the `GetConfigForClient` callback (rules are pre-built as immutable tls.Config templates at configuration load time). As a result, BFE gains the standard library's security fixes and TLS 1.3 support. Related fields in the configuration files (such as `Grade`, `Chacha20`, `DynamicRecord`, `EnableSslv2ClientHello`, etc.) are still parsed but no longer take effect, so configuration files from older versions can be used to start directly.
 
-In the distributed TLS session cache above, the stored session state can be in two formats: original format and OpenSSL format. If you are a new user of BFE, you can give priority to the original format, which is more compact and can reduce the storage cost of distributed cache; If you need to replace the OpenSSL-based reverse proxy, you can use the OpenSSL format, so that the two programs can read the session state saved by each other, and achieve smooth migration without affecting the session reuse handshake.
+### TLS Session Reuse
 
-### Session Ticket Key Update
+BFE supports TLS session reuse based on Session ID and Session Ticket. Since v1.9.0, BFE uses the standard library's built-in Session Ticket mechanism, and the former Redis-based distributed session cache has been removed. The `SessionTicketKey` configuration is retained and supports hot update (the Session Ticket key should be updated regularly to ensure forward security). In cluster deployment, multiple BFE instances can be configured with the same SessionTicketKey to improve the session reuse rate.
 
-If the Session Ticket key is leaked, forward security cannot be guaranteed. For the connection based on Session Ticket session reuse, if a malicious attacker records the traffic in advance and then uses the leaked Session Ticket key, it can successfully calculate the session key and decrypt and restore the plaintext information.
-
-To avoid the above problems, the Session Ticket key file should be updated regularly. BFE supports hot loading and updating the Session Ticket key, and does not require process restart to cause long connection interruption.
 
 ### Adaptive Fault Tolerance of OCSP Staple
 
@@ -131,18 +128,9 @@ Benefiting from the built-in memory security feature of Go language, BFE can avo
 
 ### Security Grade of TLS
 
-The correct configuration of various TLS/SSL parameters (protocol version, encryption suite) of the service requires the operation and maintenance personnel to have a deeper understanding of TLS/SSL security. In order to reduce the security risk of deployment caused by administrator misconfiguration, BFE provides four security grades for TLS, as follows. The TLS protocol version and encryption suite supported by BFE are different under different security grades.
+The correct configuration of various TLS/SSL parameters (protocol version, encryption suite) of the service requires the operation and maintenance personnel to have a deeper understanding of TLS/SSL security. Historically, BFE provided four TLS security grades (A+/A/B/C) to reduce the risk of deployment misconfiguration.
 
-| Security Grade | Description                               |
-| -------------- | ----------------------------------------- |
-| A+             | Highest security and lowest compatibility |
-| A              | High security and moderate compatibility  |
-| B              | Moderate security and high compatibility  |
-| C              | Lowest security and highest compatibility |
-
-Accordingly, different security grades have different security and compatibility, and are applicable to different business scenarios. For example, security grade A+ only supports TLS 1.2 and above and encryption suites with higher security strength. Grade A+ is applicable to business scenarios requiring PCI DSS level security compliance, such as financial payment business.
-
-For the detailed definition of protocols and encryption suites of each security grade, see the description in "[Configure HTTPS Service](../../operation/configuration/https. md)".
+Since v1.9.0, with the removal of the bfe_tls fork, the `Grade` field is deprecated: for TLS 1.2 the cipher suites use the standard library's default secure subset, and for TLS 1.3 the cipher suites are fixed by the standard library (not configurable). The mapping between the legacy security grades and protocol versions/cipher suites can still be found in "Configure HTTPS Service" as historical reference; no security grade needs to be selected in new versions.
 
 ### Secure Storage of Keys
 
@@ -152,9 +140,7 @@ If the hardware is not available, the key can be encrypted and replaced regularl
 
 ### TLS/SSL JA3 Fingerprint
 
-BFE supports the calculation of TLS/SSL client fingerprints based on the characteristics in the ClientHello message. BFE uses JA3 algorithm, which can easily and efficiently identify client programs, and work with the business layer for anti-crawling or anti-cheating.
-
-In BFE, you can use mod_header module to carry the JA3 fingerprint in the request header to the downstream. For specific usage, please refer to the relevant description of the [mod_header module](https://github.com/bfenetworks/bfe/blob/develop/docs/en_us/modules/mod_header/mod_header.md) in the user manual of BFE open source project.
+BFE releases before v1.9.0 supported computing JA3 fingerprints from ClientHello characteristics, and the fingerprint could be passed downstream via the mod_header module for anti-crawling or anti-cheating. Since v1.9.0, with the removal of the bfe_tls fork, the JA3 fingerprint capability has been removed as well.
 
 ### Traffic Visibility with TLS/SSL 
 
@@ -170,6 +156,12 @@ Due to the complexity of HTTPS transformation, the migration from HTTP to HTTPS 
 Certificate update is a high-risk operation. The certificate chain configuration error, the changes in sending the certificate by the intermediate CA in the certificate chain, the lack of necessary extensions in the certificate, and the non-standard format of the certificate may trigger compatibility problems, and lead to some user access exceptions after the certificate is updated. Reliable control of update risk and rapid detection of potential problems are indispensable for ordinary operation and maintenance personnel.
 
 BFE supports updating certificates by user sampling with Canary Release, and supports real-time statistics of the change of handshake success rate between new and old certificates. It can quickly intercept exceptions that are difficult to find through the fluctuation of total traffic in the small traffic stage in Canary Release.
+
+### Hot Reload of TLS Configuration and Version Directories
+
+BFE supports hot reload of TLS configuration through the `/reload/tls_conf` interface, without restarting the process or interrupting long connections.
+
+In deployment modes where configurations are delivered by a distribution agent (such as conf-agent) in the form of "version directory + symbolic link", the interface can be called with a `path` parameter (`/reload/tls_conf?path=<version directory>`): in this case, server_cert_conf, tls_rule_conf, and the client CA/CRL base directories under tls_conf are all relocated to the specified version directory, making the version directory a self-contained complete TLS configuration unit. BFE performs a full load check of the version directory before the symbolic link is switched, so only configurations that pass the check are activated; CA/CRL directories configured with absolute paths outside tls_conf are not relocated and are still read from the configured absolute paths. Calls without the `path` parameter and the startup load path behave unchanged.
 
 ### Mutual Backup Certificates from Multi-CA
 

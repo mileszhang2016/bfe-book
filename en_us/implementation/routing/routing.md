@@ -231,9 +231,7 @@ func (t *HostTable) LookupCluster(req *bfe_basic.Request) error {
 
 ## AI Request Routing
 
-In the AI gateway scenario, BFE also routes AI requests through the `mod_ai_route` module. This module runs at the `HandleFoundProduct` callback, and looks up the routing table in the priority order of **apikey → entity → global** according to `AiBasicInfo.ClientApiKey`. After a rule is hit, it returns a `targets` list containing cluster, model, and weight, as well as a `fallbacks` degradation list, which are used by the AI gateway forwarding path `ServeHTTPForAI`.
-
-`mod_ai_route` is independent of the tenant-level basic/advanced rule tables described above and is mainly used in the AI gateway scenario. For related configuration and implementation, see `../../../bfe/docs/zh_cn/modules/mod_ai_route/mod_ai_route.md` and `../../../bfe/docs/zh_cn/sys_design/mod_ai_route.md`.
+In the AI gateway scenario, BFE also routes AI requests through the `mod_ai_route` module: it looks up the routing table in the priority order of **apikey → entity → global**, and after a rule is hit, returns the target clusters, models and the degradation list, which are used by the AI gateway forwarding path `ServeHTTPForAI`. `mod_ai_route` is independent of the tenant-level basic/advanced rule tables described above. For its detailed design and configuration, see the [AI Route Rule Design](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/design/chapter11-ai-route-rules.md) and [mod_ai_route Implementation](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/implementation/chapter31-mod-ai-route.md) chapters of the book [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README.md).
 
 
 ## links

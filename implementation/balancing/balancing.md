@@ -130,7 +130,9 @@ return nil, err.News("subcluster balancing failure")
 
 ### EPP 外部策略
 
-当 `BalanceMode` 配置为 EPP 时，BFE 优先调用外部 EPP 服务进行后端选择。该服务基于 Envoy ext_proc 协议，BFE 将请求头部（及请求体）发送给 EPP 服务，EPP 服务通过动态元数据（如 `envoy.lb` 中的 `x-gateway-destination-endpoint`）返回目标后端地址；BFE 先在本地子集群中查找该地址，若找不到则构造临时后端。若 EPP 服务未返回决策或调用失败，BFE 会回退到本地 WRR/WLC 策略继续选择后端。
+GSLB还支持配置EPP（External Processing Policy）外部策略，通过gRPC调用外部处理服务决定目标后端。该能力主要面向AI网关场景的推理池调度，其设计与配置详见[Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter16-epp-scheduling-design.md)一书第16章。
+
+另外，配置热加载时若某子集群从cluster_table中消失，BFE会释放其旧后端实例；子集群导出为空实例池时按空池加载（请求得到"无可用后端"错误），避免流量继续打到已释放的实例上。
 
 ## 分布式负载均衡
 
@@ -185,7 +187,7 @@ func smoothBalance(backs BackendList) (*backend.BfeBackend, error) {
 		  			best = backendRR
 				  	max = backendRR.current
 				}
-				total += backendRR.current
+				total += backendRR.weight
 
 				// update current weight
 				backendRR.current += backendRR.weight
@@ -203,7 +205,7 @@ func smoothBalance(backs BackendList) (*backend.BfeBackend, error) {
 - 选择实例偏好指数最大的实例
 - 更新各实例偏好指数：
   - 对各实例的偏好指数值，分别加上该实例权重
-- 对于选中实例，对其偏好指数值减去所有实例的偏好指数（在加上实例权重之前的值）总和
+- 对于选中实例，对其偏好指数值减去所有实例的权重总和
 
 例如: 假设后端子集群包含三个后端实例a/b/c，权重分别为 5/1/1。如果基于以上算法，选择的过程如下：
 

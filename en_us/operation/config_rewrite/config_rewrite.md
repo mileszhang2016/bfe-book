@@ -58,6 +58,8 @@ The above configuration adds a rule for product *example_product*: for the reque
 
 Finally, the rule will modify the request whose path starts with "/rewrite" and add the path prefix "/bfe/" to it, that is, change the path from "/rewrite" to "/bfe/rewrite".
 
+Since v1.9.0, action parameters support embedded expressions with the `=` prefix (e.g. `"Params": ["=req_host() + '.example.com'"]`), which are evaluated dynamically at request processing time. For the expression syntax and available functions, see [Chap35 Condition Expression Engine](../../develop/expr_condition_engine/expr_condition_engine.md).
+
 
 ## Actions
 

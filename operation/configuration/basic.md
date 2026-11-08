@@ -25,7 +25,7 @@
 
 *bfe.conf*包含了BFE的基础配置。读者了解配置文件，可以从这个文件入手。该配置文件包含大量配置选项，具体含义将在后续进行描述。
 
-在bfe.conf中除了端口配置外，还包括服务基础配置（如 `MaxCpus`、`Layer4LoadBalancer`、`KeepAliveEnabled`、`Modules` 等）、TLS 基础配置（`[HttpsBasic]`）、Session Cache（`[SessionCache]`）和 Session Ticket（`[SessionTicket]`）等。具体配置项说明可参考 [bfe.conf 配置文档](../../../bfe/docs/zh_cn/configuration/bfe.conf.md)。
+在bfe.conf中除了端口配置外，还包括服务基础配置（如 `MaxCpus`、`Layer4LoadBalancer`、`KeepAliveEnabled`、`Modules` 等）、TLS 基础配置（`[HttpsBasic]`）、Session Ticket（`[SessionTicket]`）以及安全相关的密钥环配置（`[Security]`，用于下发配置文件敏感字段解密，详见[第十六章 配置管理](../../design/configuration/configuration.md)）等。具体配置项说明可参考 [bfe.conf 配置文档](../../../bfe/docs/zh_cn/configuration/bfe.conf.md)。
 
 ```ini
 [Server]
@@ -273,16 +273,7 @@ cluster_conf.data中的配置项较多，各配置项的具体描述如下（完
 
 * AI服务配置 AIConf
 
-| 配置项 | 描述 |
-| ----------------------------------- | ---------------------------------------------- |
-| AIConf.Type | Integer<br>AI服务类型，当前保留字段，请保持为0 |
-| AIConf.Provider | String<br>该集群在 model_prices 中对应的 provider 名称 |
-| AIConf.Keys | []Object<br>后端大模型服务的 API-Key 列表，按权重加权随机选择 |
-| AIConf.KeyPolicy | Object<br>多Key场景下的选择策略与重试退避配置 |
-| AIConf.ModelMapping | Map[string]string<br>原请求model到后端服务model的映射 |
-| AIConf.MatchPrefix | String<br>需要匹配的 provider/model 前缀，必须以 `/` 结尾 |
-| AIConf.StripPrefix | Boolean<br>是否裁剪 `MatchPrefix` 指定前缀<br>默认值 `false` |
-| AIConf.ModelTable | Object<br>该集群的模型定价表，由控制面自动填充 |
+集群配置还支持AIConf段，用于描述该集群作为大模型后端服务时的接入参数（API-Key列表、Key选择策略、模型映射、模型定价表等），仅在AI网关场景下使用。AIConf各配置项的详细说明参见 [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/operation/chapter21-cluster-and-route-config.md)一书的集群与路由配置一章。
 
 <br>
 

@@ -55,6 +55,14 @@ BFE's access logs are output by extension modules, mainly including the followin
 
 - **mod_access_pb3**: records access logs in [Protocol Buffers v3](https://developers.google.com/protocol-buffers) binary format. Logs produced by this module are smaller in size and more efficient to parse, making it suitable for high-performance collection and downstream analysis platforms. The log format definition is in [bfe-access-pb](https://github.com/bfenetworks/bfe-access-pb).
 
+## Log ID
+
+BFE assigns a unique Log ID to each request and session (the `X-Bfe-Log-Id` request header and the `logid` field of the access log), used for correlation and retrieval across the whole processing chain.
+
+Since v1.9.0, the Log ID has been changed from a 32-character hexadecimal string to a decimal numeric string with a value in `[1, 2^63-1]`. The rationale is that downstream analysis systems of access logs (such as report databases) generally store log identifiers as `BIGINT`; the decimal form converts and joins losslessly, avoiding data mis-merging caused by hexadecimal parse truncation. Any external system that consumes `X-Bfe-Log-Id` or the `log_id` field of the text access log needs to parse the new format.
+
+For Log IDs that cannot be converted (mod_logid not loaded, malformed value, or a legacy hexadecimal ID received from an old-version instance during rolling upgrade), BFE regenerates a non-zero Log ID locally and reports the event via the `LogidRegenerated` / `SessionIdRegenerated` counters, instead of silently writing 0 and causing downstream data mis-merging.
+
 ## links
 Previous: [Chap13 Status Monitoring](../../../en_us/design/monitor/monitor.md)  
 Next: [Chap15 Timeout Setting](../../../en_us/design/timeout/timeout.md)

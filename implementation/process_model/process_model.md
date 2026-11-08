@@ -22,7 +22,7 @@ BFE的转发进程是由Go语言编写、基于Go协程实现的高并发网络�
 
 BFE转发实例可以启动一个或多个监听协程。如果用户访问大量是短连接，单个监听协程仅使用的单个CPU核并可能成为瓶颈。这时可以通过适当调节监听协程数量来提升吞吐。
 
-每个新到的用户连接将在独立的用户连接处理协程中并发处理。对于HTTP/HTTPS协议，用户连接处理协程串行读取请求并处理；对于HTTP2/SPDY协议，由于协议支持多路复用，在多个独立的流处理协程中并发处理请求。当开启 AI Gateway（`EnableAiGateway`）时，HTTP/HTTPS 请求会进入 `ServeHTTPForAI` 处理路径，完成模型路由、Token 配额等 AI 相关处理后再转发。
+每个新到的用户连接将在独立的用户连接处理协程中并发处理。对于HTTP/HTTPS协议，用户连接处理协程串行读取请求并处理；对于HTTP2/SPDY协议，由于协议支持多路复用，在多个独立的流处理协程中并发处理请求。当开启 AI Gateway（`EnableAiGateway`）时，HTTP/HTTPS 请求会进入 AI 网关处理路径（`ServeHTTPForAI`），完成模型路由、Token 配额等 AI 相关处理后再转发（详见 [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter07-data-plane-design.md)一书）。
 
 对于WebSocket协议，在完成HTTP升级协商后，连接会切换到独立的WebSocket处理协程，在客户端与后端之间维持长连接双向转发。对于四层Stream代理，连接会进入对应的Stream处理协程，直接在客户端与后端之间进行数据透传。
 

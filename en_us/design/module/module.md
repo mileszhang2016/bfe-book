@@ -10,7 +10,7 @@ With the BFE plugin architecture:
 - When initializing a module, callback functions are registered on specified callback points.
 - On processing each request/connection, when reaching a certain callback point, all registered callback functions are executed sequentially.
 
-The following will briefly introduce the callback points in BFE, and list the built-in modules in BFE. For the detailed design of the callback framework, please refer to the description in the chapter "[Callback Framework](../../implementation/module_frame/module_frame.md)". In the chapter "[How to develop BFE module](../../development/how_to_write_module/how_to_write_module.md)", the method of developing BFE module is described in detail with an example.
+The following will briefly introduce the callback points in BFE, and list the built-in modules in BFE. For the detailed design of the callback framework, please refer to the description in the chapter "[Callback Framework](../../implementation/module_framework/module_framework.md)". In the chapter "[How to develop BFE module](../../develop/how_to_write_module/how_to_write_module.md)", the method of developing BFE module is described in detail with an example.
 
 ## Callback Points in Forwarding Process
 
@@ -98,16 +98,23 @@ In the directory **/bfe_modules/<module_name>** of BFE source code, there are a 
 |                        | mod_unified_waf    | mod_unified_waf supports integrating unified third-party WAF service into the request processing flow. |
 |                        | mod_cors           | mod_cors enables cross-origin resource sharing.              |
 |                        | mod_secure_link    | mod_secure_link is used to check authenticity and limit lifetime of links. |
-| AI Gateway             | mod_ai_token_auth  | mod_ai_token_auth supports API-key (token) authentication and quota management for LLM services. |
-|                        | mod_ai_route       | mod_ai_route routes AI requests to different backend clusters and models based on AI routing rules. |
-|                        | mod_body_process   | mod_body_process provides a streaming body processing framework for request/response bodies, supporting SSE and other scenarios. |
-|                        | mod_ai_rate_limit  | mod_ai_rate_limit performs rate limiting on AI requests by TPM/RPM/concurrency dimensions. |
+| AI Gateway             | mod_ai_token_auth  | API-key (token) authentication and quota management for LLM services. |
+|                        | mod_ai_route       | AI request routing.                                          |
+|                        | mod_body_process   | Streaming request/response body processing.                  |
+|                        | mod_ai_rate_limit  | Distributed rate limiting for AI requests.                   |
+|                        | mod_ai_cache       | AI request cache (exact/semantic).                           |
+|                        | mod_ai_batch       | OpenAI Batch API passthrough.                                |
+|                        | mod_ai_intent      | Semantic intent routing.                                     |
+|                        | mod_ai_context     | AI context compression/pruning.                              |
+|                        | mod_traffic_mirror | Traffic mirroring.                                           |
 | Extension Framework    | mod_wasmplugin     | mod_wasmplugin supports running user-defined WASM plugins following the proxy-wasm specification to extend request/response processing. |
 | Traffic Insight        | mod_access         | mod_access writes request logs and session logs in the specified format. |
 |                        | mod_access_pb3     | mod_access_pb3 records access logs in Protocol Buffers v3 format. |
 |                        | mod_key_log        | mod_key_log writes tls key logs in NSS key log format so that external programs (eg. wireshark) can decrypt TLS connections for trouble shooting. |
 |                        | mod_trace          | mod_trace enables tracing for requests based on defined rules. |
 |                        | mod_http_code      | mod_http_code reports statistics of HTTP response codes.     |
+
+The detailed design, configuration and implementation of the AI gateway modules are covered in the book [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README.md) ([Data Plane Forwarding Design](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/design/chapter07-data-plane-design.md), [Authentication and Authorization Design](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/design/chapter08-auth-design.md), [AI Route Rule Design](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/design/chapter11-ai-route-rules.md), [Quota and Rate Limit Design](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/design/chapter12-quota-and-rate-limit.md), [Model Pricing Design](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/design/chapter13-model-pricing.md)).
 
 You can access the address for monitor http://localhost:8421/monitor/module_handlers to view all callback points in the running BFE instance, the list of module callback functions registered at each callback point and the order.
 

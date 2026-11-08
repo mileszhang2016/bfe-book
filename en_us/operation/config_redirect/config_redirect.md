@@ -53,6 +53,7 @@ The above configuration adds a rule to product *example_product*: for requests t
 Notes:
 - Each rule currently supports only one action in "Actions".
 - "Status" is the HTTP redirect status code returned to the client; commonly used values are 301, 302, 303, 307, 308, or other valid HTTP redirect status codes.
+- Since v1.9.0, action parameters support embedded expressions with the `=` prefix, which are evaluated dynamically at request processing time to compute the target URL. For the expression syntax and available functions, see [Chap35 Condition Expression Engine](../../develop/expr_condition_engine/expr_condition_engine.md).
 
 ## Actions
 "Cmd" in "Actions" indicates how to set the URL in redirect.

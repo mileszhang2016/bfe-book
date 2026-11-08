@@ -183,7 +183,7 @@ func smoothBalance(backs BackendList) (*backend.BfeBackend, error) {
 		  			best = backendRR
 				  	max = backendRR.current
 				}
-				total += backendRR.current
+				total += backendRR.weight
 
 				// update current weight
 				backendRR.current += backendRR.weight
@@ -203,7 +203,7 @@ The algorithm maintains two parameters for each instance: instance weight (Weigh
 - Update the preference index of each instance:
   - The preference index value of each instance is added with the instance weight
 
-- For the selected instance, the value of its preference index is subtracted from the sum of the preference index of all instances (the value before adding the instance weight)
+- For the selected instance, the value of its preference index is subtracted from the sum of the weights of all instances
 
 For example, suppose that backend cluster contains three instances a/b/c, with weights of 5/1/1 respectively. If based on the above algorithm, the selection process is as follows:
 
@@ -216,6 +216,10 @@ For example, suppose that backend cluster contains three instances a/b/c, with w
 | 5     | 4 -2  5                           | c                 | 9 -1 -1                          |
 | 6     | 9 -1 -1                           | a                 | 7  0  0                          |
 | 7     | 7  0  0                           | a                 | 5  1  1                          |
+
+Additionally, GSLB supports the EPP (External Processing Policy) strategy, in which an external processing service is called via gRPC to decide the target backend. This capability is mainly used for inference-pool scheduling in AI gateway scenarios; for its design and configuration, see [Chap16 EPP Scheduling Design](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/design/chapter16-epp-scheduling-design.md) of the book [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README.md).
+
+On configuration hot reload, if a sub-cluster disappears from cluster_table, BFE releases its old backend instances; a sub-cluster exported as an empty instance pool is loaded as an empty pool (requests get a "no backend available" error), preventing traffic from continuing to hit released instances.
 
 ## links
 Previous: [Chap31 Request Routing](../../../en_us/implementation/routing/routing.md)  

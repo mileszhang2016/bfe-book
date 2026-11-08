@@ -23,7 +23,7 @@ In the subsequent configuration, the three instances will be defined in the same
 
 ## Modify *bfe.conf*
 
-*bfe.conf* contains the basic configuration of BFE. You can start with this file to understand the configuration file. In addition to port configuration, it also includes server basic configuration (such as `MaxCpus`, `Layer4LoadBalancer`, `KeepAliveEnabled`, `Modules`, etc.), TLS basic configuration (`[HttpsBasic]`), Session Cache (`[SessionCache]`) and Session Ticket (`[SessionTicket]`), etc. For the description of each configuration item, please refer to [bfe.conf Configuration Document](../../../../bfe/docs/en_us/configuration/bfe.conf.md).
+*bfe.conf* contains the basic configuration of BFE. You can start with this file to understand the configuration file. In addition to port configuration, it also includes server basic configuration (such as `MaxCpus`, `Layer4LoadBalancer`, `KeepAliveEnabled`, `Modules`, etc.), TLS basic configuration (`[HttpsBasic]`), Session Ticket (`[SessionTicket]`) and security-related keyring configuration (`[Security]`, used to decrypt sensitive fields of delivered configuration files; see [Chap16 Configuration Management](../../design/configuration/configuration.md)), etc. For the description of each configuration item, please refer to [bfe.conf Configuration Document](../../../../bfe/docs/en_us/configuration/bfe.conf.md).
 
 You can view the default port configuration in bfe.conf. Users can modify the listening port as needed.
 
@@ -271,16 +271,7 @@ There are many configuration items in cluster_conf.data. The specific descriptio
 
 * AI Service Configuration AIConf
 
-| Configuration Item   | Description                                                  |
-| -------------------- | ------------------------------------------------------------ |
-| AIConf.Type | Integer<br>AI service type; currently reserved; keep it 0. |
-| AIConf.Provider | String<br>Provider name of this cluster in `model_prices`. |
-| AIConf.Keys | []Object<br>API-Key list for the backend large model service; selected by weighted random. |
-| AIConf.KeyPolicy | Object<br>API-Key selection policy and retry/backoff configuration in multi-Key scenarios. |
-| AIConf.ModelMapping | Map[string]string<br>Mapping from original request model to backend service model. |
-| AIConf.MatchPrefix | String<br>Provider/model prefix to match; must end with `/`. |
-| AIConf.StripPrefix | Boolean<br>Whether to strip the prefix specified by `MatchPrefix`. Default value is `false`. |
-| AIConf.ModelTable | Object<br>Model pricing table of this cluster; automatically populated by the control plane. |
+The cluster configuration also supports the AIConf section, which describes the access parameters when the cluster serves as a large-model backend service (API-Key list, key selection policy, model mapping, model pricing table, etc.). It is only used in AI gateway scenarios. For the detailed description of each AIConf item, see the [Cluster and Route Configuration](https://github.com/rainway-ai-gateway/rainway-book/blob/main/en_us/operation/chapter21-cluster-and-route-config.md) chapter of the book [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/README.md).
 
 ### Configure Backend Cluster Instance
 The configuration of this part includes:

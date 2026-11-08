@@ -222,6 +222,15 @@ func (m *ModuleBlock) globalBlockHandler(session *bfe_basic.Session) int {
 }
 ```
 
+### Using Condition Expressions in Module Rules
+
+The "Cond" conditions in module rules can be written in two styles:
+
+- Legacy condition primitives (e.g. `req_path_in("/index", false)`), parsed by BFE's original condition engine;
+- Since v1.9.0, the new expression style (e.g. `ReqPath() == "/index"`), parsed by the condition expression engine, with stronger expressiveness (arithmetic, numeric ranges, multi-value predicates, cross-rule variable passing, etc.).
+
+The two styles are dispatched automatically through the unified `condition.Build` entry, and module code requires no changes; under the default `LegacyFirst` mode, existing configurations behave exactly as in older versions. For the expression syntax and mode switches, see [Chap35 Condition Expression Engine](../expr_condition_engine/expr_condition_engine.md).
+
 ## links
 Previous: [Chap33 Implementation of Core Protocols](../../../en_us/implementation/protocol/protocol.md)  
-Next: [Appendix1 Multi-process GC mechanism of BFE](../../../en_us/appendix/multi_process_gc/multi_process_gc.md)
+Next: [Chap35 Condition Expression Engine](../expr_condition_engine/expr_condition_engine.md)

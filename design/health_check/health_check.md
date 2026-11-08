@@ -113,6 +113,8 @@
 BFE开源项目目前只支持被动健康检查。基于BFE开源项目所实现的商业版产品中包含了集中式的主动健康检查。
 
 未来将在BFE开源项目中增加分布式的主动健康检查。
+
+自v1.9.0起，随着bfe_tls fork的移除，HTTPS健康检查探针改用标准库crypto/tls建立连接：探针客户端证书的校验（RootCAs、ServerName及是否跳过校验）直接由标准库完成，出站探测顺带获得了TLS 1.3能力。
 ## links
 上一章：[第十章 BFE的模块插件机制](../../design/module/module.md)  
 下一章：[第十二章 限流机制](../../design/limit/limit.md)

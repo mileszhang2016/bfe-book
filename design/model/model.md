@@ -144,7 +144,7 @@ BFE内置了灵活的模块插件机制，在请求转发的关键路径上设�
 - **HandleReadResponse**：在读取到后端响应之后执行。可在此阶段对响应进行处理，如压缩、Body解析等。
 - **HandleRequestFinish**：在请求处理完毕后执行。可在此阶段完成日志记录、配额扣减、访问统计等收尾工作。
 
-基于这套机制，BFE不仅内置了丰富的扩展模块（如访问日志、WAF、重定向、限流、分布式追踪等），还支持通过WASM插件以及AI网关相关模块（如AI路由、Token认证、AI限流等）灵活扩展新的流量管理能力。
+基于这套机制，BFE不仅内置了丰富的扩展模块（如访问日志、WAF、重定向、限流、分布式追踪等），还支持通过WASM插件灵活扩展新的流量管理能力。面向AI网关场景，BFE还内置了AI路由、Token鉴权、AI限流等一组扩展模块，其设计详见[Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter07-data-plane-design.md)一书。
 
 ## 多租户机制的讨论
 

@@ -228,9 +228,7 @@ func (t *HostTable) LookupCluster(req *bfe_basic.Request) error {
 
 ## AI 请求路由
 
-在 AI 网关场景下，BFE 还通过 `mod_ai_route` 模块对 AI 请求进行路由。该模块在 `HandleFoundProduct` 回调点执行，依据 `AiBasicInfo.ClientApiKey` 按 **apikey → entity → global** 三级优先级查找路由表。命中后返回包含集群、模型、权重的 `targets` 列表以及 `fallbacks` 降级列表，供 AI 网关转发路径 `ServeHTTPForAI` 使用。
-
-`mod_ai_route` 独立于上述租户级别的基础/高级规则表，主要服务于 AI 网关场景。相关配置与实现详见 `bfe/docs/zh_cn/modules/mod_ai_route/mod_ai_route.md` 与 `bfe/docs/zh_cn/sys_design/mod_ai_route.md`。
+在 AI 网关场景下，BFE 还通过 `mod_ai_route` 模块对 AI 请求进行路由：按 **apikey → entity → global** 三级优先级查找路由表，命中后返回目标集群、模型及降级列表，供 AI 网关转发路径 `ServeHTTPForAI` 使用。`mod_ai_route` 独立于上述租户级别的基础/高级规则表。其详细设计与配置参见 [Rainway AI Gateway](https://github.com/rainway-ai-gateway/rainway-book/blob/main/design/chapter11-ai-route-rules.md)一书的[AI路由规则设计](https://github.com/rainway-ai-gateway/rainway-book/blob/main/implementation/chapter31-mod-ai-route.md)。
 
 
 ## links

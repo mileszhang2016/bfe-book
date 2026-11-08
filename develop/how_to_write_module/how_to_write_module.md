@@ -222,6 +222,15 @@ func (m *ModuleBlock) globalBlockHandler(session *bfe_basic.Session) int {
 }
 ```
 
+### 在模块规则中使用条件表达式
+
+模块规则中的"Cond"条件有两种写法：
+
+- 旧风格的条件原语（如`req_path_in("/index", false)`），由BFE原条件引擎解析；
+- 自v1.9.0起，新风格的表达式（如`ReqPath() == "/index"`），由条件表达式引擎解析，表达能力更强（算术、数值区间、多值谓词、跨规则变量传递等）。
+
+两种写法经统一的`condition.Build`入口自动分派，模块代码不需要任何改动；默认的`LegacyFirst`模式下存量配置行为与旧版本完全一致。表达式语法及模式开关详见[第三十五章 条件表达式引擎](../expr_condition_engine/expr_condition_engine.md)。
+
 ## links
 上一章：[第三十三章 核心协议实现](../../implementation/protocol/protocol.md)  
-下一章：[附1 BFE的多进程GC机制](../../appendix/multi_process_gc/multi_process_gc.md)
+下一章：[第三十五章 条件表达式引擎](../expr_condition_engine/expr_condition_engine.md)
